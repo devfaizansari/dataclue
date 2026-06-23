@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "./AdminShell";
+import BlogSeoFields from "./BlogSeoFields";
+import BlogMessageModal, { type BlogMessageModalState } from "./BlogMessageModal";
 import { createBlog, fetchAdminBlogById, updateBlog } from "@/lib/blogApi";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { ApiError } from "@/lib/api";
@@ -25,6 +27,10 @@ const defaultForm: Omit<BlogPost, "id"> = {
   readTime: "5 min read",
   content: [emptyBlock()],
   published: true,
+  seoTitle: "",
+  seoDescription: "",
+  seoKeywords: "",
+  ogImage: "",
 };
 
 export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
@@ -33,8 +39,21 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
   const [form, setForm] = useState<Omit<BlogPost, "id">>(defaultForm);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
+  const [messageModal, setMessageModal] = useState<BlogMessageModalState>({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+
+  const showMessage = (type: "success" | "error", title: string, message: string) => {
+    setMessageModal({ open: true, type, title, message });
+  };
+
+  const closeMessage = () => {
+    setMessageModal((current) => ({ ...current, open: false }));
+  };
 
   useEffect(() => {
     if (!isAdminAuthenticated()) {
@@ -46,7 +65,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
 
     async function load() {
       setLoading(true);
-      setError(null);
       try {
         const blog = await fetchAdminBlogById(blogId!);
         setForm({
@@ -59,6 +77,10 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           readTime: blog.readTime,
           content: blog.content.length > 0 ? blog.content : [emptyBlock()],
           published: blog.published ?? true,
+          seoTitle: blog.seoTitle ?? "",
+          seoDescription: blog.seoDescription ?? "",
+          seoKeywords: blog.seoKeywords ?? "",
+          ogImage: blog.ogImage ?? "",
         });
         setSlugTouched(true);
       } catch (err) {
@@ -66,7 +88,7 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           router.replace("/admin/login");
           return;
         }
-        setError("Failed to load blog post.");
+        showMessage("error", "Load failed", "Failed to load blog post.");
       } finally {
         setLoading(false);
       }
@@ -126,36 +148,94 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
-    setError(null);
+
+    const filteredContent = form.content
+      .map((block) => {
+        if (block.type === "list") {
+          return {
+            type: "list" as const,
+            items: block.items.map((item) => item.trim()).filter(Boolean),
+          };
+        }
+        return {
+          type: block.type,
+          text: block.text?.trim() ?? "",
+        };
+      })
+      .filter((block) => {
+        if (block.type === "list") {
+          return block.items.length > 0;
+        }
+        return block.text.length > 0;
+      });
 
     const payload = {
       ...form,
       slug: form.slug.trim().toLowerCase(),
-      content: form.content.filter((block) => {
-        if (block.type === "list") {
-          return block.items.some((item) => item.trim());
-        }
-        return block.text?.trim();
-      }),
+      seoTitle: form.seoTitle?.trim() || null,
+      seoDescription: form.seoDescription?.trim() || null,
+      seoKeywords: form.seoKeywords?.trim() || null,
+      ogImage: form.ogImage?.trim() || null,
+      content: filteredContent,
       readTime: estimateReadTime(form.content),
     };
 
     if (payload.content.length === 0) {
-      setError("Add at least one content block.");
+      showMessage("error", "Cannot save", "Add at least one content block.");
+      setSaving(false);
+      return;
+    }
+
+    if ((payload.seoTitle?.length ?? 0) > 70) {
+      showMessage("error", "Cannot save", "Meta title must be 70 characters or less.");
+      setSaving(false);
+      return;
+    }
+
+    if ((payload.seoDescription?.length ?? 0) > 320) {
+      showMessage("error", "Cannot save", "Meta description must be 320 characters or less.");
+      setSaving(false);
+      return;
+    }
+
+    if ((payload.seoKeywords?.length ?? 0) > 500) {
+      showMessage("error", "Cannot save", "Keywords must be 500 characters or less.");
+      setSaving(false);
+      return;
+    }
+
+    if ((payload.ogImage?.length ?? 0) > 500) {
+      showMessage("error", "Cannot save", "Social share image URL must be 500 characters or less.");
+      setSaving(false);
+      return;
+    }
+
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(payload.slug)) {
+      showMessage(
+        "error",
+        "Cannot save",
+        "Slug must use lowercase letters, numbers, and hyphens only.",
+      );
       setSaving(false);
       return;
     }
 
     try {
-      if (isEdit && blogId) {
-        await updateBlog(blogId, payload);
-      } else {
-        await createBlog(payload);
-      }
-      router.push("/admin/blogs");
+      const response =
+        isEdit && blogId
+          ? await updateBlog(blogId, payload)
+          : await createBlog(payload);
+
+      showMessage(
+        "success",
+        isEdit ? "Blog updated" : "Blog created",
+        isEdit
+          ? `"${response.title}" has been updated successfully.`
+          : `"${response.title}" has been created successfully.`,
+      );
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Save failed.";
-      setError(message);
+      const message = err instanceof ApiError ? err.message : "Save failed. Please try again.";
+      showMessage("error", isEdit ? "Update failed" : "Create failed", message);
     } finally {
       setSaving(false);
     }
@@ -170,7 +250,8 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
   }
 
   return (
-    <AdminShell title={isEdit ? "Edit blog post" : "New blog post"} showCreateButton={false}>
+    <>
+      <AdminShell title={isEdit ? "Edit blog post" : "New blog post"} showCreateButton={false}>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid gap-4 rounded-xl border border-border bg-surface p-5 sm:grid-cols-2">
           <div className="sm:col-span-2">
@@ -250,6 +331,11 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
             </label>
           </div>
         </div>
+
+        <BlogSeoFields
+          form={form}
+          onChange={(key, value) => updateField(key, value)}
+        />
 
         <div className="rounded-xl border border-border bg-surface p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -339,12 +425,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           </div>
         </div>
 
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-            {error}
-          </div>
-        )}
-
         <div className="flex gap-3">
           <button
             type="submit"
@@ -362,6 +442,9 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           </button>
         </div>
       </form>
-    </AdminShell>
+      </AdminShell>
+
+      <BlogMessageModal modal={messageModal} onClose={closeMessage} />
+    </>
   );
 }

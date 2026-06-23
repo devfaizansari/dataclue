@@ -24,12 +24,45 @@ export type AnalysisResponse = {
 
 class ApiError extends Error {
   constructor(
-    message: string,
+    message: unknown,
     public status: number,
   ) {
-    super(message);
+    super(formatApiErrorDetail(message));
     this.name = "ApiError";
   }
+}
+
+export function formatApiErrorDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        if (item && typeof item === "object" && "msg" in item) {
+          const record = item as { msg?: string; loc?: unknown[] };
+          const field = Array.isArray(record.loc)
+            ? record.loc.filter((part) => part !== "body").join(".")
+            : "";
+          const message = typeof record.msg === "string" ? record.msg : "Validation error";
+          return field ? `${field}: ${message}` : message;
+        }
+
+        return "Validation error";
+      })
+      .join("; ");
+  }
+
+  if (detail && typeof detail === "object" && "message" in detail) {
+    return String((detail as { message: unknown }).message);
+  }
+
+  return "Request failed";
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -49,7 +82,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       detail = response.statusText || detail;
     }
-    throw new ApiError(detail, response.status);
+    throw new ApiError(body.detail ?? detail, response.status);
   }
 
   return response.json() as Promise<T>;

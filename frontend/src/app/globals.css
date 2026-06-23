@@ -13,6 +13,9 @@
   --muted: #64748b;
   --border: #e2e8f0;
   --footer-bg: #0f172a;
+  --scrollbar-thumb: #c7d2e0;
+  --scrollbar-thumb-hover: #94a3b8;
+  --scrollbar-track: #f1f5f9;
 }
 
 .dark {
@@ -26,6 +29,9 @@
   --muted: #94a3b8;
   --border: #334155;
   --footer-bg: #020617;
+  --scrollbar-thumb: #475569;
+  --scrollbar-thumb-hover: #64748b;
+  --scrollbar-track: #0f172a;
 }
 
 @theme inline {
@@ -39,15 +45,17 @@
   --color-muted: var(--muted);
   --color-border: var(--border);
   --color-footer-bg: var(--footer-bg);
-  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-sans), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-inter), system-ui, sans-serif;
 }
 
 html {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
   scroll-behavior: smooth;
   margin: 0;
   padding: 0;
+  min-height: 100%;
+  background-color: var(--footer-bg);
 }
 
 body {
@@ -56,7 +64,57 @@ body {
   font-family: inherit;
   margin: 0;
   padding: 0;
+  min-height: 100dvh;
+  overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Custom scrollbars (site-wide) ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-track);
+  border-radius: 999px;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--primary);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+html {
+  scrollbar-color: var(--scrollbar-thumb) var(--background);
+}
+
+html::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+html::-webkit-scrollbar-thumb {
+  border-color: var(--background);
 }
 
 /* ── Ambient motion utilities ── */
@@ -200,4 +258,50 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── Static / legal page prose ── */
+.prose-content h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.prose-content h2:first-child {
+  margin-top: 0;
+}
+
+.prose-content p {
+  margin-bottom: 1rem;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.prose-content ul {
+  margin-bottom: 1rem;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.prose-content li {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.prose-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-content a:hover {
+  color: var(--primary-dark);
+}
+
+.prose-content .last-updated {
+  font-size: 0.875rem;
+  color: var(--muted);
 }

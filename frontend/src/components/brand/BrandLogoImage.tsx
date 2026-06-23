@@ -27,7 +27,7 @@ export default function BrandLogoImage({
   return (
     <Image
       src={BRAND_LOGO_PATH}
-      alt="dataclue"
+      alt="dataclue — online statistical analysis platform"
       width={px}
       height={px}
       priority={priority}

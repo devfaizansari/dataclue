@@ -37,7 +37,7 @@ async function request<T>(path: string, init?: RequestInit, auth = false): Promi
     } catch {
       detail = response.statusText || detail;
     }
-    throw new ApiError(detail, response.status);
+    throw new ApiError(body.detail ?? detail, response.status);
   }
 
   if (response.status === 204) {

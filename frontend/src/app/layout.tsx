@@ -1,24 +1,18 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import ThemeProvider from "@/components/theme/ThemeProvider";
 import AppSplashGate from "@/components/brand/AppSplashGate";
+import ScrollButtons from "@/components/layout/ScrollButtons";
+import JsonLd from "@/components/seo/JsonLd";
+import { organizationJsonLd, rootMetadata } from "@/lib/seo";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "dataclue — Statistical Analysis, Made Simple",
-  description:
-    "Perform professional statistical tests directly in your browser. No installation, no data upload — just results.",
-  icons: {
-    icon: [{ url: "/brand/dataclue-logo.png", type: "image/png" }],
-    apple: [{ url: "/apple-icon.png", type: "image/png" }],
-    shortcut: ["/favicon.ico"],
-  },
-};
+export const metadata: Metadata = rootMetadata;
 
 export default function RootLayout({
   children,
@@ -28,15 +22,17 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} h-full`}
+      className={`${inter.variable} h-full`}
       suppressHydrationWarning
     >
       <body
-        className="min-h-full flex flex-col bg-background font-sans text-foreground antialiased"
+        className="flex min-h-dvh flex-col bg-background font-sans text-foreground antialiased"
         suppressHydrationWarning
       >
+        <JsonLd data={organizationJsonLd()} />
         <ThemeProvider>
           <AppSplashGate>{children}</AppSplashGate>
+          <ScrollButtons />
         </ThemeProvider>
       </body>
     </html>

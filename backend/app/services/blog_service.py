@@ -38,6 +38,10 @@ def _doc_to_response(doc: dict[str, Any]) -> BlogResponse:
         read_time=doc.get("read_time", "5 min read"),
         content=doc.get("content", []),
         published=bool(doc.get("published", True)),
+        seo_title=doc.get("seo_title"),
+        seo_description=doc.get("seo_description"),
+        seo_keywords=doc.get("seo_keywords"),
+        og_image=doc.get("og_image"),
     )
 
 
@@ -78,6 +82,10 @@ def create_blog(payload: BlogCreate) -> BlogResponse:
         "read_time": payload.read_time.strip(),
         "content": _serialize_content(payload.content),
         "published": payload.published,
+        "seo_title": payload.seo_title,
+        "seo_description": payload.seo_description,
+        "seo_keywords": payload.seo_keywords,
+        "og_image": payload.og_image,
         "created_at": now,
         "updated_at": now,
     }
@@ -107,9 +115,9 @@ def update_blog(blog_id: str, payload: BlogUpdate) -> BlogResponse:
         if not SLUG_PATTERN.match(updates["slug"]):
             raise DataValidationError("Slug must use lowercase letters, numbers, and hyphens only")
 
-    for text_field in ("title", "excerpt", "category", "author", "read_time"):
+    for text_field in ("title", "excerpt", "category", "author", "read_time", "seo_title", "seo_description", "seo_keywords", "og_image"):
         if text_field in updates and isinstance(updates[text_field], str):
-            updates[text_field] = updates[text_field].strip()
+            updates[text_field] = updates[text_field].strip() or None
 
     if "content" in updates and updates["content"] is not None:
         updates["content"] = _serialize_content(updates["content"])

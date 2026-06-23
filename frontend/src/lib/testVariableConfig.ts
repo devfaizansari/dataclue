@@ -96,6 +96,14 @@ const TEST_FIELDS: Record<string, VariableField[]> = {
     { key: "outcome_column", label: "Outcome (target class)", type: "categorical", required: true },
     { key: "predictor_columns", label: "Predictors (numeric)", type: "numeric[]", required: true },
   ],
+  "regression-models": [
+    { key: "y_column", label: "Outcome (Y, numeric)", type: "numeric", required: true },
+    { key: "predictor_columns", label: "Predictors (numeric)", type: "numeric[]", required: true },
+  ],
+  "time-series-models": [
+    { key: "date_column", label: "Date / time column", type: "categorical", required: true },
+    { key: "value_column", label: "Series value (numeric)", type: "numeric", required: true },
+  ],
 };
 
 export function getVariableFieldsForTest(testId: string): VariableField[] {
@@ -157,6 +165,15 @@ export function buildDefaultSelections(
     }
     if (field.key === "group_column") {
       selections[field.key] = groupColumn;
+      continue;
+    }
+    if (field.key === "date_column") {
+      const byName = variables.find((v) => /date|time|month|period|timestamp/i.test(v.name));
+      selections[field.key] = byName?.name ?? categorical[0] ?? variables[0]?.name ?? "";
+      continue;
+    }
+    if (field.key === "value_column") {
+      selections[field.key] = pickValueColumn(variables, "");
       continue;
     }
     if (field.type === "numeric") {

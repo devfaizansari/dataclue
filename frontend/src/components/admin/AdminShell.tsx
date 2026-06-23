@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { adminLogout } from "@/lib/blogApi";
 import Logo from "@/components/ui/Logo";
 import PageMotion from "@/components/motion/PageMotion";
+import AdminPageNavigation from "./AdminPageNavigation";
 
 type AdminShellProps = {
   children: React.ReactNode;
   title: string;
   showCreateButton?: boolean;
+  centerContent?: boolean;
 };
 
 const navItems = [
@@ -21,6 +23,7 @@ export default function AdminShell({
   children,
   title,
   showCreateButton = true,
+  centerContent = false,
 }: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -78,7 +81,11 @@ export default function AdminShell({
       </div>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className={`mb-6 flex flex-col gap-3 sm:flex-row sm:items-center ${
+            centerContent ? "justify-center text-center" : "sm:justify-between"
+          }`}
+        >
           <h1 className="text-2xl font-bold text-foreground">{title}</h1>
           {showCreateButton && (
             <Link
@@ -89,6 +96,7 @@ export default function AdminShell({
             </Link>
           )}
         </div>
+        <AdminPageNavigation />
         <PageMotion>{children}</PageMotion>
       </main>
     </div>

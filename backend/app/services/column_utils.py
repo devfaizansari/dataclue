@@ -379,3 +379,107 @@ def predictors_and_binary_outcome(
         outcome_col,
         predictor_cols,
     )
+
+
+def predictors_and_numeric_outcome(
+    df: pd.DataFrame,
+    options: dict | None = None,
+) -> tuple[pd.DataFrame, pd.Series, str, list[str]]:
+    options = _options(options)
+    num_cols = numeric_columns(df)
+
+    outcome_col: str | None = None
+    for key in ("y_column", "outcome_column", "value_column"):
+        name = options.get(key)
+        if name and str(name) in df.columns:
+            outcome_col = str(name)
+            break
+
+    if outcome_col is None:
+        outcome_col = num_cols[-1] if num_cols else None
+
+    if outcome_col is None or outcome_col not in num_cols:
+        raise DataValidationError("Need a numeric outcome variable (Y)")
+
+    selected = options.get("predictor_columns") or options.get("x_column")
+    if isinstance(selected, str):
+        predictor_cols = [selected]
+    elif isinstance(selected, list):
+        predictor_cols = [str(c) for c in selected]
+    else:
+        predictor_cols = []
+
+    predictor_cols = [c for c in predictor_cols if c in num_cols and c != outcome_col]
+    if not predictor_cols:
+        predictor_cols = [col for col in num_cols if col != outcome_col]
+
+    if not predictor_cols:
+        raise DataValidationError("Need at least one numeric predictor variable")
+
+    subset = df[predictor_cols + [outcome_col]].dropna()
+    y = pd.to_numeric(subset[outcome_col], errors="coerce")
+    valid = y.notna()
+    subset = subset[valid]
+    y = y[valid].astype(float)
+
+    if len(subset) < 3:
+        raise DataValidationError("Need at least 3 complete rows")
+
+    if y.nunique() < 2:
+        raise DataValidationError("Outcome variable must have at least 2 distinct values")
+
+    return (
+        subset[predictor_cols].astype(float),
+        y,
+        outcome_col,
+        predictor_cols,
+    )
+
+
+def parse_time_series(
+    df: pd.DataFrame,
+    options: dict | None = None,
+) -> tuple[pd.Series, str, str]:
+    options = _options(options)
+    num_cols = numeric_columns(df)
+
+    date_col: str | None = None
+    for key in ("date_column", "time_column", "datetime_column"):
+        name = options.get(key)
+        if name and str(name) in df.columns:
+            date_col = str(name)
+            break
+    if date_col is None:
+        for col in df.columns:
+            if str(col).lower() in {"date", "time", "datetime", "month", "period", "timestamp"}:
+                date_col = str(col)
+                break
+    if date_col is None:
+        date_col = str(df.columns[0])
+
+    value_col: str | None = None
+    for key in ("value_column", "y_column", "series_column"):
+        name = options.get(key)
+        if name and str(name) in df.columns:
+            value_col = str(name)
+            break
+    if value_col is None:
+        for col in num_cols:
+            if col != date_col:
+                value_col = col
+                break
+    if value_col is None or value_col not in num_cols:
+        raise DataValidationError("Need a numeric value column for the time series")
+
+    subset = df[[date_col, value_col]].copy()
+    subset[date_col] = pd.to_datetime(subset[date_col], errors="coerce")
+    subset[value_col] = pd.to_numeric(subset[value_col], errors="coerce")
+    subset = subset.dropna().sort_values(date_col)
+    if len(subset) < 12:
+        raise DataValidationError("Need at least 12 dated observations after cleaning")
+
+    series = subset.set_index(date_col)[value_col].astype(float)
+    if series.nunique() < 2:
+        raise DataValidationError("Value column must vary over time")
+
+    return series, date_col, value_col

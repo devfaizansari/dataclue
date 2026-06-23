@@ -26,6 +26,8 @@ export const HOME_METHOD_LINKS = [
   { label: "Linear Regression", testId: "linear-regression" },
   { label: "Logistic Regression", testId: "logistic-regression" },
   { label: "Classification Models", testId: "classification-models" },
+  { label: "Regression Models", testId: "regression-models" },
+  { label: "Time Series Models", testId: "time-series-models" },
   { label: "Multiple Regression", testId: "multiple-regression" },
   { label: "Factor Analysis", testId: "factor-analysis" },
   { label: "Cluster Analysis", testId: "cluster-analysis" },

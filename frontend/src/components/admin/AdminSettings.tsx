@@ -84,14 +84,15 @@ export default function AdminSettings() {
   };
 
   return (
-    <AdminShell title="Account settings" showCreateButton={false}>
-      {loading ? (
-        <p className="text-sm text-muted">Loading…</p>
-      ) : (
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-xl space-y-5 rounded-xl border border-border bg-surface p-6 shadow-sm"
-        >
+    <AdminShell title="Account settings" showCreateButton={false} centerContent>
+      <div className="mx-auto w-full max-w-xl">
+        {loading ? (
+          <p className="text-center text-sm text-muted">Loading…</p>
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            className="w-full space-y-5 rounded-xl border border-border bg-surface p-6 shadow-sm"
+          >
           <p className="text-sm text-muted">
             Update your admin username or password. You must enter your current password to save
             changes.
@@ -169,7 +170,8 @@ export default function AdminSettings() {
             {saving ? "Saving…" : "Save changes"}
           </button>
         </form>
-      )}
+        )}
+      </div>
     </AdminShell>
   );
 }

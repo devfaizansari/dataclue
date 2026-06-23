@@ -85,9 +85,15 @@ def apply_feature_selection(
     if not enabled or X.shape[1] <= 1:
         return X, list(X.columns)
 
-    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-    selector = RandomForestClassifier(n_estimators=100, random_state=42)
+    y_arr = np.asarray(y)
+    use_regressor = len(np.unique(y_arr)) > 15
+    selector = (
+        RandomForestRegressor(n_estimators=100, random_state=42)
+        if use_regressor
+        else RandomForestClassifier(n_estimators=100, random_state=42)
+    )
     selector.fit(X, y)
     importances = selector.feature_importances_
     threshold = float(np.mean(importances))

@@ -6,6 +6,7 @@ import HistogramChart from "@/components/charts/HistogramChart";
 import ROCChart from "@/components/charts/ROCChart";
 import ConfusionMatrixChart from "@/components/charts/ConfusionMatrixChart";
 import ScatterRegressionChart from "@/components/charts/ScatterRegressionChart";
+import TimeSeriesForecastChart from "@/components/charts/TimeSeriesForecastChart";
 
 type HistogramBin = { bin: string; count: number };
 type GroupMean = { group: string; mean: number; sd: number };
@@ -13,6 +14,12 @@ type Point = { x: number; y: number };
 type FrequencyItem = { label: string; count: number };
 type RocPoint = { fpr: number; tpr: number };
 type ConfusionMatrixData = { labels: string[]; matrix: number[][] };
+type TimeSeriesData = {
+  dates: string[];
+  actual: number[];
+  predicted: Array<number | null>;
+  train_size: number;
+};
 
 type ResultsChartsProps = {
   chartData: Record<string, unknown>;
@@ -43,6 +50,14 @@ export default function ResultsCharts({
   const regressionLine = asArray<Point>(chartData.regression_line);
   const roc = asArray<RocPoint>(chartData.roc);
   const confusionRaw = chartData.confusion_matrix as ConfusionMatrixData | undefined;
+  const timeSeriesRaw = chartData.time_series as TimeSeriesData | undefined;
+  const timeSeries =
+    timeSeriesRaw &&
+    Array.isArray(timeSeriesRaw.dates) &&
+    Array.isArray(timeSeriesRaw.actual) &&
+    Array.isArray(timeSeriesRaw.predicted)
+      ? timeSeriesRaw
+      : undefined;
   const confusionMatrix =
     confusionRaw &&
     Array.isArray(confusionRaw.labels) &&
@@ -56,7 +71,8 @@ export default function ResultsCharts({
       frequency?.length ||
       scatter?.length ||
       roc?.length ||
-      confusionMatrix,
+      confusionMatrix ||
+      timeSeries,
   );
 
   if (!hasCharts) return null;
@@ -80,6 +96,14 @@ export default function ResultsCharts({
         />
       )}
       {roc && roc.length > 0 && <ROCChart data={roc} />}
+      {timeSeries && (
+        <TimeSeriesForecastChart
+          dates={timeSeries.dates}
+          actual={timeSeries.actual}
+          predicted={timeSeries.predicted}
+          trainSize={timeSeries.train_size}
+        />
+      )}
       {confusionMatrix && (
         <ConfusionMatrixChart
           labels={confusionMatrix.labels}

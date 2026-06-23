@@ -57,6 +57,8 @@ def test_tests_catalog(client: TestClient) -> None:
         "linear-regression",
         "logistic-regression",
         "classification-models",
+        "regression-models",
+        "time-series-models",
         "mcnemar",
     ],
 )
@@ -82,6 +84,60 @@ def test_analyze_endpoints(client: TestClient, test_id: str) -> None:
 28,70,0
 30,62,0
 31,68,0"""
+    if test_id == "regression-models":
+        csv_data = """Age,StudyHours,Salary
+23,4.5,42000
+25,5.2,48000
+22,6.0,51000
+24,4.8,45000
+26,5.5,50000
+27,3.5,38000
+29,4.0,40000
+28,5.8,52000
+30,3.2,36000
+31,6.2,55000"""
+        options = {
+            "y_column": "Salary",
+            "predictor_columns": ["Age", "StudyHours"],
+            "model": "random_forest",
+            "test_size": 0.2,
+            "random_state": 42,
+            "scale_features": False,
+            "hyperparameters": {"n_estimators": 50, "max_depth": 3, "min_samples_split": 2},
+        }
+    if test_id == "time-series-models":
+        csv_data = """Date,Sales
+2022-01,100
+2022-02,105
+2022-03,110
+2022-04,115
+2022-05,118
+2022-06,122
+2022-07,125
+2022-08,130
+2022-09,128
+2022-10,135
+2022-11,140
+2022-12,145
+2023-01,142
+2023-02,148
+2023-03,152
+2023-04,158
+2023-05,162
+2023-06,168
+2023-07,172
+2023-08,175
+2023-09,170
+2023-10,178
+2023-11,182
+2023-12,188"""
+        options = {
+            "date_column": "Date",
+            "value_column": "Sales",
+            "model": "arima",
+            "forecast_horizon": 4,
+            "hyperparameters": {"p": 1, "d": 1, "q": 1},
+        }
     if test_id == "mcnemar":
         csv_data = """Before,After
 Yes,Yes
@@ -231,6 +287,88 @@ def test_classification_models_ignores_missing_in_unused_columns(client: TestCli
     data = response.json()
     assert data["test_id"] == "classification-models"
     assert any(stat["label"] == "N" and stat["value"] == "10" for stat in data["stats"])
+
+
+def test_regression_models_with_options(client: TestClient) -> None:
+    csv_data = """Age,StudyHours,Salary
+23,4.5,42000
+25,5.2,48000
+22,6.0,51000
+24,4.8,45000
+26,5.5,50000
+27,3.5,38000
+29,4.0,40000
+28,5.8,52000
+30,3.2,36000
+31,6.2,55000"""
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "regression-models",
+            "csv_data": csv_data,
+            "options": {
+                "y_column": "Salary",
+                "predictor_columns": ["Age", "StudyHours"],
+                "model": "ridge",
+                "test_size": 0.2,
+                "random_state": 42,
+                "scale_features": True,
+                "hyperparameters": {"alpha": 1.0},
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "regression-models"
+    assert any(stat["label"] == "R²" for stat in data["stats"])
+    assert data["chart_data"]["scatter"] is not None
+
+
+def test_time_series_models_arima(client: TestClient) -> None:
+    csv_data = """Date,Sales
+2022-01,100
+2022-02,105
+2022-03,110
+2022-04,115
+2022-05,118
+2022-06,122
+2022-07,125
+2022-08,130
+2022-09,128
+2022-10,135
+2022-11,140
+2022-12,145
+2023-01,142
+2023-02,148
+2023-03,152
+2023-04,158
+2023-05,162
+2023-06,168
+2023-07,172
+2023-08,175
+2023-09,170
+2023-10,178
+2023-11,182
+2023-12,188"""
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "time-series-models",
+            "csv_data": csv_data,
+            "options": {
+                "date_column": "Date",
+                "value_column": "Sales",
+                "model": "arima",
+                "forecast_horizon": 6,
+                "hyperparameters": {"p": 1, "d": 1, "q": 1},
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "time-series-models"
+    assert any(stat["label"] == "RMSE" for stat in data["stats"])
+    assert data["chart_data"]["time_series"] is not None
 
 
 def test_summary_statistics_group_and_ci(client: TestClient) -> None:

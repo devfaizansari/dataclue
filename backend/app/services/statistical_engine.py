@@ -36,6 +36,8 @@ from app.services.column_utils import (
     predictors_and_binary_outcome,
 )
 from app.services.classification_models import classification_models
+from app.services.regression_models import regression_models
+from app.services.time_series_models import time_series_models
 from app.utils.data_parser import parse_csv
 from app.services.chart_helpers import enrich_chart_data, histogram_bins
 
@@ -1247,6 +1249,8 @@ TEST_REGISTRY: dict[str, Callable[[pd.DataFrame, dict], AnalysisResponse]] = {
     "multiple-regression": multiple_regression,
     "logistic-regression": logistic_regression,
     "classification-models": classification_models,
+    "regression-models": regression_models,
+    "time-series-models": time_series_models,
     "polynomial-regression": polynomial_regression,
     "ridge-regression": ridge_regression,
     "pearson-correlation": pearson_correlation,
@@ -1438,6 +1442,8 @@ def list_tests() -> list[dict[str, str]]:
         "multiple-regression": "Multiple Regression",
         "logistic-regression": "Logistic Regression",
         "classification-models": "Classification Models",
+        "regression-models": "Regression Models",
+        "time-series-models": "Time Series Models",
         "polynomial-regression": "Polynomial Regression",
         "ridge-regression": "Ridge Regression",
         "pearson-correlation": "Pearson Correlation",

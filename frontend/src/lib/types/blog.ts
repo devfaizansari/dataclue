@@ -14,6 +14,10 @@ export type BlogPost = {
   readTime: string;
   content: BlogContentBlock[];
   published?: boolean;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  ogImage?: string | null;
 };
 
 export type BlogListResponse = {
@@ -48,4 +52,26 @@ export function estimateReadTime(content: BlogContentBlock[]): string {
   }, 0);
   const minutes = Math.max(1, Math.ceil(words / 200));
   return `${minutes} min read`;
+}
+
+export type ResolvedBlogSeo = {
+  title: string;
+  description: string;
+  keywords: string[];
+  ogImage?: string;
+};
+
+export function resolveBlogSeo(post: BlogPost): ResolvedBlogSeo {
+  const keywords =
+    post.seoKeywords
+      ?.split(",")
+      .map((keyword) => keyword.trim())
+      .filter(Boolean) ?? [];
+
+  return {
+    title: post.seoTitle?.trim() || post.title,
+    description: post.seoDescription?.trim() || post.excerpt,
+    keywords,
+    ogImage: post.ogImage?.trim() || undefined,
+  };
 }

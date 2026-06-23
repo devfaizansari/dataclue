@@ -4,12 +4,14 @@ import Footer from "@/components/layout/Footer";
 import Container from "@/components/ui/Container";
 import BlogsListing from "@/components/blogs/BlogsListing";
 import BlogsPageHeader from "@/components/blogs/BlogsPageHeader";
+import { createPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Blogs — dataclue",
+export const metadata: Metadata = createPageMetadata({
+  title: "Blogs",
   description:
-    "Statistical analysis guides, research tips, and tutorials from the dataclue team.",
-};
+    "Statistical analysis guides, research tips, and tutorials to help you master data analysis and reporting.",
+  path: "/blogs",
+});
 
 export default function BlogsPage() {
   return (

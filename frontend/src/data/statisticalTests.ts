@@ -17,6 +17,18 @@ export const standaloneTests: StatisticalTest[] = [
     description:
       "Train machine learning classifiers with your choice of model, hyperparameters, and evaluation settings.",
   },
+  {
+    id: "regression-models",
+    label: "Regression Models",
+    description:
+      "Train machine learning regressors to predict continuous outcomes with R², RMSE, and prediction plots.",
+  },
+  {
+    id: "time-series-models",
+    label: "Time Series Models",
+    description:
+      "Forecast future values with ARIMA, SARIMA, ETS, or deep learning (CNN, LSTM, GRU).",
+  },
 ];
 
 export const testCategories: TestCategory[] = [
@@ -335,6 +347,36 @@ export const sampleCsvByTest: Record<string, string> = {
 28,70,0
 30,62,0
 31,68,0`,
+  "regression-models": `Age,StudyHours,Salary
+23,4.5,42000
+25,5.2,48000
+22,6.0,51000
+24,4.8,45000
+26,5.5,50000
+27,3.5,38000
+29,4.0,40000
+28,5.8,52000
+30,3.2,36000
+31,6.2,55000`,
+  "time-series-models": `Date,Sales
+2023-01,120
+2023-02,128
+2023-03,135
+2023-04,142
+2023-05,138
+2023-06,150
+2023-07,158
+2023-08,162
+2023-09,155
+2023-10,168
+2023-11,175
+2023-12,182
+2024-01,178
+2024-02,185
+2024-03,192
+2024-04,198
+2024-05,205
+2024-06,210`,
   "roc-curve": `Score,Passed
 78,1
 85,1

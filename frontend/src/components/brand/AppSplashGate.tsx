@@ -44,7 +44,7 @@ export default function AppSplashGate({ children }: AppSplashGateProps) {
         {showSplash && <BrandSplash key="app-splash" mode="intro" />}
       </AnimatePresence>
       <motion.div
-        className="flex min-h-full flex-1 flex-col"
+        className="flex min-h-dvh flex-1 flex-col"
         initial={false}
         animate={{
           opacity: ready ? 1 : 0,

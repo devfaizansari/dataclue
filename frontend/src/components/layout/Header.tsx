@@ -81,13 +81,13 @@ export default function Header() {
         }`}
       >
         <Container className={blendWithHero ? "pb-2" : ""}>
-          <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4">
-            <div className="justify-self-start">
+          <div className="relative flex h-16 items-center justify-between gap-3">
+            <div className="shrink-0">
               <Logo compact />
             </div>
 
             <nav
-              className="hidden items-center justify-center gap-8 lg:flex"
+              className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 lg:flex"
               aria-label="Main navigation"
             >
               {navLinks.map((link) => (
@@ -100,11 +100,11 @@ export default function Header() {
               ))}
             </nav>
 
-            <div className="flex items-center justify-end gap-2 justify-self-end">
-              <ThemeToggle className="hidden sm:flex" />
+            <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+              <ThemeToggle className="h-9 w-9 rounded-lg lg:h-10 lg:w-10" />
 
               <div
-                className="mx-1 hidden h-5 w-px bg-border sm:block"
+                className="mx-0.5 hidden h-5 w-px bg-border sm:block"
                 aria-hidden
               />
 

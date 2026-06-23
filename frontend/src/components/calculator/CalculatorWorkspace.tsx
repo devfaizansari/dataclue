@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Container from "@/components/ui/Container";
@@ -11,6 +11,8 @@ import VariableSelector from "./VariableSelector";
 import MetricsSelector from "./MetricsSelector";
 import GroupAnalysisSelect from "./GroupAnalysisSelect";
 import ClassificationModelSelector from "./ClassificationModelSelector";
+import RegressionModelSelector from "./RegressionModelSelector";
+import TimeSeriesModelSelector from "./TimeSeriesModelSelector";
 import DataPreprocessingCard from "./DataPreprocessingCard";
 import ClassificationResultsPanel from "./ClassificationResultsPanel";
 import ResultsCard from "./ResultsCard";
@@ -48,6 +50,26 @@ import {
   type SummaryOptions,
 } from "@/lib/summaryMetrics";
 import {
+  buildRegressionPayload,
+  getDefaultAdvancedState as getDefaultRegressionAdvancedState,
+  getDefaultRegressionOptions,
+  type RegressionAdvancedState,
+} from "@/lib/regressionAdvanced";
+import {
+  buildTimeSeriesPayload,
+  getDefaultAdvancedState as getDefaultTimeSeriesAdvancedState,
+  getDefaultTimeSeriesOptions,
+  type TimeSeriesAdvancedState,
+} from "@/lib/timeSeriesAdvanced";
+import {
+  validateTimeSeriesOptions,
+  type TimeSeriesOptions,
+} from "@/lib/timeSeriesModels";
+import {
+  validateRegressionOptions,
+  type RegressionOptions,
+} from "@/lib/regressionModels";
+import {
   showOptionalGroupBy,
   supportsDataPreview,
 } from "@/lib/testAnalysisUi";
@@ -60,6 +82,10 @@ const csvFormatHints: Record<string, string> = {
     "Select a binary outcome (0/1 or two categories) and numeric predictor variables.",
   "classification-models":
     "Select an outcome column (2+ classes) and numeric predictors, then pick a classifier and tune its settings.",
+  "regression-models":
+    "Select a numeric outcome (Y) and numeric predictors, then pick a regressor and tune its settings.",
+  "time-series-models":
+    "Select a date column and numeric value column, then choose a forecasting model (ARIMA, SARIMA, ETS, CNN, LSTM, or GRU).",
   "roc-curve": "Select a numeric score variable and a binary outcome variable.",
 };
 
@@ -68,6 +94,7 @@ const REGRESSION_TESTS = new Set([
   "multiple-regression",
   "polynomial-regression",
   "ridge-regression",
+  "regression-models",
 ]);
 
 function buildInitialColumnTypes(csvData: string) {
@@ -106,12 +133,27 @@ export default function CalculatorWorkspace() {
   const [advancedSettings, setAdvancedSettings] = useState<ClassificationAdvancedState>(
     getDefaultAdvancedState(),
   );
+  const [regressionOptions, setRegressionOptions] = useState<RegressionOptions>(
+    getDefaultRegressionOptions(),
+  );
+  const [regressionAdvanced, setRegressionAdvanced] = useState<RegressionAdvancedState>(
+    getDefaultRegressionAdvancedState(),
+  );
+  const [timeSeriesOptions, setTimeSeriesOptions] = useState<TimeSeriesOptions>(
+    getDefaultTimeSeriesOptions(),
+  );
+  const [timeSeriesAdvanced, setTimeSeriesAdvanced] = useState<TimeSeriesAdvancedState>(
+    getDefaultTimeSeriesAdvancedState(),
+  );
   const [results, setResults] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const testInfo = getTestInfo(activeTestId);
   const isClassification = activeTestId === "classification-models";
+  const isRegression = activeTestId === "regression-models";
+  const isTimeSeries = activeTestId === "time-series-models";
+  const isMlModel = isClassification || isRegression || isTimeSeries;
   const showGroupBy = showOptionalGroupBy(activeTestId);
   const showPreview = supportsDataPreview(activeTestId) && csvData.trim().length > 0;
 
@@ -142,6 +184,24 @@ export default function CalculatorWorkspace() {
         }));
         if (testId === "classification-models") {
           setAdvancedSettings((prev) => ({
+            ...prev,
+            preprocessing: {
+              ...prev.preprocessing,
+              columnTypes,
+            },
+          }));
+        }
+        if (testId === "regression-models") {
+          setRegressionAdvanced((prev) => ({
+            ...prev,
+            preprocessing: {
+              ...prev.preprocessing,
+              columnTypes,
+            },
+          }));
+        }
+        if (testId === "time-series-models") {
+          setTimeSeriesAdvanced((prev) => ({
             ...prev,
             preprocessing: {
               ...prev.preprocessing,
@@ -180,9 +240,53 @@ export default function CalculatorWorkspace() {
         },
       }));
     }
+    if (activeTestId === "regression-models") {
+      setRegressionAdvanced((prev) => ({
+        ...prev,
+        preprocessing: {
+          ...prev.preprocessing,
+          columnTypes,
+        },
+      }));
+    }
+    if (activeTestId === "time-series-models") {
+      setTimeSeriesAdvanced((prev) => ({
+        ...prev,
+        preprocessing: {
+          ...prev.preprocessing,
+          columnTypes,
+        },
+      }));
+    }
   }, [activeTestId]);
 
+  const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const pendingScrollToResultsRef = useRef(false);
+
+  const scrollToResults = useCallback(() => {
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    requestAnimationFrame(() => {
+      resultsAnchorRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingScrollToResultsRef.current || loading) return;
+    if (!results && !error) return;
+
+    pendingScrollToResultsRef.current = false;
+    scrollToResults();
+  }, [results, error, loading, scrollToResults]);
+
   const handleRunAnalysis = async (data: string) => {
+    pendingScrollToResultsRef.current = true;
+
     const validationError = validateVariableSelections(activeTestId, variables, selections);
     if (validationError) {
       setError(validationError);
@@ -199,6 +303,24 @@ export default function CalculatorWorkspace() {
 
     if (isClassification) {
       const modelError = validateClassificationOptions(classificationOptions);
+      if (modelError) {
+        setError(modelError);
+        setResults(null);
+        return;
+      }
+    }
+
+    if (isRegression) {
+      const modelError = validateRegressionOptions(regressionOptions);
+      if (modelError) {
+        setError(modelError);
+        setResults(null);
+        return;
+      }
+    }
+
+    if (isTimeSeries) {
+      const modelError = validateTimeSeriesOptions(timeSeriesOptions);
       if (modelError) {
         setError(modelError);
         setResults(null);
@@ -230,6 +352,14 @@ export default function CalculatorWorkspace() {
         );
       }
 
+      if (isRegression) {
+        Object.assign(options, buildRegressionPayload(regressionOptions, regressionAdvanced));
+      }
+
+      if (isTimeSeries) {
+        Object.assign(options, buildTimeSeriesPayload(timeSeriesOptions, timeSeriesAdvanced));
+      }
+
       const response = await runAnalysis(activeTestId, data, options);
       setResults(response);
     } catch (err) {
@@ -251,6 +381,14 @@ export default function CalculatorWorkspace() {
     if (testId === "classification-models") {
       setClassificationOptions(getDefaultClassificationOptions());
       setAdvancedSettings(getDefaultAdvancedState());
+    }
+    if (testId === "regression-models") {
+      setRegressionOptions(getDefaultRegressionOptions());
+      setRegressionAdvanced(getDefaultRegressionAdvancedState());
+    }
+    if (testId === "time-series-models") {
+      setTimeSeriesOptions(getDefaultTimeSeriesOptions());
+      setTimeSeriesAdvanced(getDefaultTimeSeriesAdvancedState());
     }
     if (variables.length > 0) {
       setSelections(buildDefaultSelections(testId, variables));
@@ -308,11 +446,23 @@ export default function CalculatorWorkspace() {
 
   const preprocessingSettings = isClassification
     ? advancedSettings.preprocessing
-    : previewSettings;
+    : isRegression
+      ? regressionAdvanced.preprocessing
+      : isTimeSeries
+        ? timeSeriesAdvanced.preprocessing
+        : previewSettings;
 
   const handlePreprocessingChange = (preprocessing: PreprocessingSettings) => {
     if (isClassification) {
       setAdvancedSettings((prev) => ({ ...prev, preprocessing }));
+      return;
+    }
+    if (isRegression) {
+      setRegressionAdvanced((prev) => ({ ...prev, preprocessing }));
+      return;
+    }
+    if (isTimeSeries) {
+      setTimeSeriesAdvanced((prev) => ({ ...prev, preprocessing }));
       return;
     }
     setPreviewSettings(preprocessing);
@@ -351,7 +501,7 @@ export default function CalculatorWorkspace() {
                 csvData={csvData}
                 settings={preprocessingSettings}
                 onChange={handlePreprocessingChange}
-                showAdvancedControls={isClassification}
+                showAdvancedControls={isMlModel}
                 />
               </Reveal>
             )}
@@ -377,7 +527,7 @@ export default function CalculatorWorkspace() {
               </Reveal>
             )}
 
-            {variables.length > 0 && (
+            {variables.length > 0 && !isMlModel && (
               <Reveal delay={0.14}>
                 <MetricsSelector
                   options={summaryOptions}
@@ -396,6 +546,30 @@ export default function CalculatorWorkspace() {
                 />
               </Reveal>
             )}
+
+            {isRegression && variables.length > 0 && (
+              <Reveal delay={0.16}>
+                <RegressionModelSelector
+                options={regressionOptions}
+                advanced={regressionAdvanced}
+                onOptionsChange={setRegressionOptions}
+                onAdvancedChange={setRegressionAdvanced}
+                />
+              </Reveal>
+            )}
+
+            {isTimeSeries && variables.length > 0 && (
+              <Reveal delay={0.16}>
+                <TimeSeriesModelSelector
+                options={timeSeriesOptions}
+                advanced={timeSeriesAdvanced}
+                onOptionsChange={setTimeSeriesOptions}
+                onAdvancedChange={setTimeSeriesAdvanced}
+                />
+              </Reveal>
+            )}
+
+            <div ref={resultsAnchorRef} className="scroll-mt-20" aria-hidden />
 
             <AnimatePresence mode="wait">
               {error && (
