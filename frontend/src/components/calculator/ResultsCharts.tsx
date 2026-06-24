@@ -3,12 +3,14 @@
 import FrequencyChart from "@/components/charts/FrequencyChart";
 import GroupMeansChart from "@/components/charts/GroupMeansChart";
 import HistogramChart from "@/components/charts/HistogramChart";
+import QQPlotChart from "@/components/charts/QQPlotChart";
 import ROCChart from "@/components/charts/ROCChart";
 import ConfusionMatrixChart from "@/components/charts/ConfusionMatrixChart";
 import ScatterRegressionChart from "@/components/charts/ScatterRegressionChart";
 import TimeSeriesForecastChart from "@/components/charts/TimeSeriesForecastChart";
 
 type HistogramBin = { bin: string; count: number };
+type QQPoint = { theoretical: number; sample: number };
 type GroupMean = { group: string; mean: number; sd: number };
 type Point = { x: number; y: number };
 type FrequencyItem = { label: string; count: number };
@@ -45,6 +47,7 @@ export default function ResultsCharts({
 }: ResultsChartsProps) {
   const groupMeans = asArray<GroupMean>(chartData.group_means);
   const histogram = extractHistogram(chartData);
+  const qqPlot = asArray<QQPoint>(chartData.qq_plot);
   const frequency = asArray<FrequencyItem>(chartData.frequency);
   const scatter = asArray<Point>(chartData.scatter);
   const regressionLine = asArray<Point>(chartData.regression_line);
@@ -68,6 +71,7 @@ export default function ResultsCharts({
   const hasCharts = Boolean(
     groupMeans?.length ||
       histogram?.length ||
+      qqPlot?.length ||
       frequency?.length ||
       scatter?.length ||
       roc?.length ||
@@ -81,6 +85,7 @@ export default function ResultsCharts({
     <div className="grid gap-4 lg:grid-cols-2">
       {groupMeans && groupMeans.length > 0 && <GroupMeansChart data={groupMeans} />}
       {histogram && histogram.length > 0 && <HistogramChart data={histogram} />}
+      {qqPlot && qqPlot.length > 0 && <QQPlotChart data={qqPlot} />}
       {frequency && frequency.length > 0 && <FrequencyChart data={frequency} />}
       {scatter && scatter.length > 0 && (
         <ScatterRegressionChart

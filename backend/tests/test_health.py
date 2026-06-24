@@ -43,7 +43,7 @@ def test_tests_catalog(client: TestClient) -> None:
     response = client.get("/api/v1/tests")
     assert response.status_code == 200
     data = response.json()
-    assert data["count"] == 41
+    assert data["count"] == 45
 
 
 @pytest.mark.parametrize(
@@ -430,3 +430,68 @@ def test_survey_analyze_sparse_excel_like_data(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert "interpretation" in response.json()
+
+
+def test_shapiro_wilk_includes_qq_plot_and_downloads(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "shapiro-wilk",
+            "csv_data": SAMPLE_CSV,
+            "options": {"value_columns": ["Score"]},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    chart_data = data["chart_data"]
+    assert chart_data is not None
+    assert len(chart_data["qq_plot"]) > 0
+    downloads = chart_data["downloads"]
+    assert len(downloads) >= 2
+    assert any(item["label"] == "Variable data" for item in downloads)
+    assert any(item["label"] == "Q-Q plot data" for item in downloads)
+    assert any(item["label"] == "Normalized data" for item in downloads)
+
+
+def test_feature_scaling_transform_and_download(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "feature-scaling",
+            "csv_data": SAMPLE_CSV,
+            "options": {
+                "value_columns": ["Age", "Score"],
+                "transform_method": "standard",
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "feature-scaling"
+    downloads = data["chart_data"]["downloads"]
+    assert len(downloads) == 1
+    assert "Age" in downloads[0]["content"]
+    assert "Score" in downloads[0]["content"]
+
+
+def test_normalize_data_includes_normalized_download(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "normalize-data",
+            "csv_data": SAMPLE_CSV,
+            "options": {
+                "value_columns": ["Score"],
+                "transform_method": "quantile",
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "normalize-data"
+    downloads = data["chart_data"]["downloads"]
+    labels = [item["label"] for item in downloads]
+    assert "Normalized data" in labels
+    assert "Original data" in labels
+    assert any("Shapiro p before" in stat["label"] for stat in data["stats"])
+    assert any("Shapiro p after" in stat["label"] for stat in data["stats"])

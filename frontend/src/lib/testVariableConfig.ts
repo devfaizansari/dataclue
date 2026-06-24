@@ -47,6 +47,8 @@ const TEST_FIELDS: Record<string, VariableField[]> = {
   "shapiro-wilk": singleNumeric,
   "kolmogorov-smirnov": singleNumeric,
   "anderson-darling": singleNumeric,
+  "normalize-data": singleNumeric,
+  "feature-scaling": singleNumeric,
   "frequency-table": [
     { key: "variable_column", label: "Variable", type: "categorical", required: true },
   ],

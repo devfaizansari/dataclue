@@ -72,6 +72,12 @@ export const testCategories: TestCategory[] = [
         description:
           "Compute percentiles, quartiles, and interquartile range for any numeric variable.",
       },
+      {
+        id: "feature-scaling",
+        label: "Feature Scaling & Transformations",
+        description:
+          "Scale or transform numeric variables with StandardScaler, RobustScaler, QuantileTransform, log, and more — then download the processed dataset.",
+      },
     ],
   },
   {
@@ -251,6 +257,12 @@ export const testCategories: TestCategory[] = [
         label: "Anderson-Darling Test",
         description:
           "Test whether a given sample of data is drawn from a specified distribution.",
+      },
+      {
+        id: "normalize-data",
+        label: "Normalize Data",
+        description:
+          "Transform non-normal data toward a normal distribution, compare before/after normality, and download the normalized dataset.",
       },
       {
         id: "levene-test",

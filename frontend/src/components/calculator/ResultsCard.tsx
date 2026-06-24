@@ -7,6 +7,10 @@ import {
   type ExportFormat,
   type ExportableResults,
 } from "@/lib/exportResults";
+import {
+  downloadDataset,
+  type DownloadableDataset,
+} from "@/lib/exportData";
 
 type ResultStat = {
   label: string;
@@ -23,6 +27,7 @@ type ResultsCardProps = {
   interpretation: string;
   apaOutput?: string;
   charts?: ReactNode;
+  downloads?: DownloadableDataset[];
 };
 
 const exportOptions: { format: ExportFormat; label: string }[] = [
@@ -37,8 +42,10 @@ export default function ResultsCard({
   interpretation,
   apaOutput,
   charts,
+  downloads = [],
 }: ResultsCardProps) {
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   const exportData: ExportableResults = {
     title,
@@ -53,6 +60,16 @@ export default function ResultsCard({
       exportResults(exportData, format);
     } finally {
       setExporting(null);
+    }
+  };
+
+  const handleDataDownload = (dataset: DownloadableDataset, asExcel: boolean) => {
+    const key = `${dataset.filename}-${asExcel ? "excel" : "csv"}`;
+    setDownloadingKey(key);
+    try {
+      downloadDataset(dataset, asExcel);
+    } finally {
+      setDownloadingKey(null);
     }
   };
 
@@ -98,6 +115,46 @@ export default function ResultsCard({
         </div>
 
         {charts && <div className="space-y-4">{charts}</div>}
+
+        {downloads.length > 0 && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <h3 className="mb-1 text-sm font-semibold text-foreground">Download data</h3>
+            <p className="mb-3 text-xs text-muted">
+              Export your dataset or normalized values as CSV or Excel.
+            </p>
+            <div className="flex flex-col gap-3">
+              {downloads.map((dataset) => (
+                <div
+                  key={dataset.filename}
+                  className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{dataset.label}</p>
+                    <p className="text-xs text-muted">{dataset.filename}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDataDownload(dataset, false)}
+                      disabled={downloadingKey !== null}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {downloadingKey === `${dataset.filename}-csv` ? "Downloading…" : "CSV"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDataDownload(dataset, true)}
+                      disabled={downloadingKey !== null}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {downloadingKey === `${dataset.filename}-excel` ? "Downloading…" : "Excel"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950/40">
           <h3 className="mb-2 text-sm font-semibold text-green-800 dark:text-green-300">

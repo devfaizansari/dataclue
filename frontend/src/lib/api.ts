@@ -82,7 +82,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       detail = response.statusText || detail;
     }
-    throw new ApiError(body.detail ?? detail, response.status);
+    throw new ApiError(detail, response.status);
   }
 
   return response.json() as Promise<T>;

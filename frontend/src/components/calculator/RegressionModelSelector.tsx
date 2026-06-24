@@ -15,6 +15,7 @@ import type {
   PreprocessingSettings,
   RegressionAdvancedState,
 } from "@/lib/regressionAdvanced";
+import { ML_SCALER_OPTIONS } from "@/lib/featureTransform";
 
 type RegressionModelSelectorProps = {
   options: RegressionOptions;
@@ -283,11 +284,10 @@ export default function RegressionModelSelector({
                         scalerType: value as FeatureEngineeringSettings["scalerType"],
                       })
                     }
-                    options={[
-                      { value: "standard", label: "StandardScaler" },
-                      { value: "minmax", label: "MinMaxScaler" },
-                      { value: "robust", label: "RobustScaler" },
-                    ]}
+                    options={ML_SCALER_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
                   />
                 </div>
                 <label className="flex items-center gap-3 rounded-lg border border-border bg-surface-muted/40 px-3 py-2.5 sm:col-span-2">

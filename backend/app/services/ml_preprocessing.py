@@ -4,9 +4,32 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+from sklearn.preprocessing import (
+    MaxAbsScaler,
+    MinMaxScaler,
+    PowerTransformer,
+    QuantileTransformer,
+    RobustScaler,
+    StandardScaler,
+)
 
 from app.core.exceptions import DataValidationError
+
+SCALER_TYPES = frozenset({"standard", "minmax", "robust", "maxabs", "quantile", "power"})
+TRANSFORM_TYPES = frozenset({"log", "log1p", "sqrt"})
+FEATURE_METHODS = SCALER_TYPES | TRANSFORM_TYPES
+
+METHOD_LABELS = {
+    "standard": "StandardScaler",
+    "minmax": "MinMaxScaler",
+    "robust": "RobustScaler",
+    "maxabs": "MaxAbsScaler",
+    "quantile": "QuantileTransformer",
+    "power": "PowerTransformer (Yeo-Johnson)",
+    "log": "Log transform",
+    "log1p": "Log1p transform",
+    "sqrt": "Square-root transform",
+}
 
 
 def _resolve_scope(df: pd.DataFrame, preprocessing: dict[str, Any]) -> list[str]:
@@ -74,7 +97,75 @@ def get_scaler(scaler_type: str | None):
         return MinMaxScaler()
     if key == "robust":
         return RobustScaler()
+    if key == "maxabs":
+        return MaxAbsScaler()
+    if key == "quantile":
+        return QuantileTransformer(output_distribution="normal", random_state=42)
+    if key == "power":
+        return PowerTransformer(method="yeo-johnson")
     return StandardScaler()
+
+
+def _numeric_columns(df: pd.DataFrame, columns: list[str]) -> list[str]:
+    numeric: list[str] = []
+    for col in columns:
+        if col not in df.columns:
+            continue
+        coerced = pd.to_numeric(df[col], errors="coerce")
+        if coerced.notna().any():
+            numeric.append(str(col))
+    return numeric
+
+
+def _prepare_numeric_subset(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    subset = df[columns].apply(pd.to_numeric, errors="coerce")
+    if subset.isna().any().any():
+        subset = subset.fillna(subset.median(numeric_only=True))
+    if subset.isna().any().any():
+        raise DataValidationError(
+            "Selected columns contain non-numeric values that cannot be transformed."
+        )
+    return subset
+
+
+def apply_feature_method(
+    df: pd.DataFrame,
+    columns: list[str],
+    method: str,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    key = (method or "standard").lower()
+    if key not in FEATURE_METHODS:
+        raise DataValidationError(
+            f"Unknown transform method '{method}'. "
+            f"Supported methods: {', '.join(sorted(FEATURE_METHODS))}."
+        )
+
+    numeric_cols = _numeric_columns(df, columns)
+    if not numeric_cols:
+        raise DataValidationError("Select at least one numeric column to transform.")
+
+    work = df.copy()
+    subset = _prepare_numeric_subset(work, numeric_cols)
+
+    if key in SCALER_TYPES:
+        transformed = get_scaler(key).fit_transform(subset)
+        work[numeric_cols] = transformed
+        return work, {"method": key, "columns": numeric_cols, "kind": "scaler"}
+
+    if key == "log":
+        if (subset <= 0).any().any():
+            raise DataValidationError("Log transform requires all selected values to be positive.")
+        work[numeric_cols] = np.log(subset)
+    elif key == "log1p":
+        if (subset < -1).any().any():
+            raise DataValidationError("Log1p transform requires all selected values to be greater than -1.")
+        work[numeric_cols] = np.log1p(subset)
+    elif key == "sqrt":
+        if (subset < 0).any().any():
+            raise DataValidationError("Square-root transform requires all selected values to be non-negative.")
+        work[numeric_cols] = np.sqrt(subset)
+
+    return work, {"method": key, "columns": numeric_cols, "kind": "transform"}
 
 
 def apply_feature_selection(

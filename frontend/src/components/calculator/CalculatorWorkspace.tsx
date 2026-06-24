@@ -76,6 +76,13 @@ import {
 import { EASE_OUT, fadeUp } from "@/lib/motion";
 import Reveal from "@/components/motion/Reveal";
 import BrandLoadingOverlay from "@/components/brand/BrandLoadingOverlay";
+import {
+  getDefaultFeatureTransformMethod,
+  getDefaultNormalizationMethod,
+  type FeatureTransformMethod,
+} from "@/lib/featureTransform";
+import FeatureTransformSelector from "./FeatureTransformSelector";
+import { parseDownloadDatasets } from "@/lib/exportData";
 
 const csvFormatHints: Record<string, string> = {
   "logistic-regression":
@@ -86,6 +93,10 @@ const csvFormatHints: Record<string, string> = {
     "Select a numeric outcome (Y) and numeric predictors, then pick a regressor and tune its settings.",
   "time-series-models":
     "Select a date column and numeric value column, then choose a forecasting model (ARIMA, SARIMA, ETS, CNN, LSTM, or GRU).",
+  "feature-scaling":
+    "Select one or more numeric columns, choose a scaling or transformation method, then download the processed dataset.",
+  "normalize-data":
+    "Select numeric column(s), pick a normalization method (Quantile recommended), then download the normalized dataset.",
   "roc-curve": "Select a numeric score variable and a binary outcome variable.",
 };
 
@@ -145,6 +156,12 @@ export default function CalculatorWorkspace() {
   const [timeSeriesAdvanced, setTimeSeriesAdvanced] = useState<TimeSeriesAdvancedState>(
     getDefaultTimeSeriesAdvancedState(),
   );
+  const [featureTransformMethod, setFeatureTransformMethod] = useState<FeatureTransformMethod>(
+    getDefaultFeatureTransformMethod(),
+  );
+  const [normalizationMethod, setNormalizationMethod] = useState<FeatureTransformMethod>(
+    getDefaultNormalizationMethod(),
+  );
   const [results, setResults] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +170,9 @@ export default function CalculatorWorkspace() {
   const isClassification = activeTestId === "classification-models";
   const isRegression = activeTestId === "regression-models";
   const isTimeSeries = activeTestId === "time-series-models";
+  const isFeatureScaling = activeTestId === "feature-scaling";
+  const isDataNormalization = activeTestId === "normalize-data";
+  const showsTransformSelector = isFeatureScaling || isDataNormalization;
   const isMlModel = isClassification || isRegression || isTimeSeries;
   const showGroupBy = showOptionalGroupBy(activeTestId);
   const showPreview = supportsDataPreview(activeTestId) && csvData.trim().length > 0;
@@ -360,6 +380,14 @@ export default function CalculatorWorkspace() {
         Object.assign(options, buildTimeSeriesPayload(timeSeriesOptions, timeSeriesAdvanced));
       }
 
+      if (isFeatureScaling) {
+        options.transform_method = featureTransformMethod;
+      }
+
+      if (isDataNormalization) {
+        options.transform_method = normalizationMethod;
+      }
+
       const response = await runAnalysis(activeTestId, data, options);
       setResults(response);
     } catch (err) {
@@ -390,6 +418,12 @@ export default function CalculatorWorkspace() {
       setTimeSeriesOptions(getDefaultTimeSeriesOptions());
       setTimeSeriesAdvanced(getDefaultTimeSeriesAdvancedState());
     }
+    if (testId === "feature-scaling") {
+      setFeatureTransformMethod(getDefaultFeatureTransformMethod());
+    }
+    if (testId === "normalize-data") {
+      setNormalizationMethod(getDefaultNormalizationMethod());
+    }
     if (variables.length > 0) {
       setSelections(buildDefaultSelections(testId, variables));
     }
@@ -415,6 +449,7 @@ export default function CalculatorWorkspace() {
         stats={stats}
         interpretation={result.interpretation}
         apaOutput={result.apa_output ?? undefined}
+        downloads={parseDownloadDatasets(result.chart_data?.downloads)}
         charts={
           <ResultsCharts
             chartData={result.chart_data ?? {}}
@@ -527,7 +562,7 @@ export default function CalculatorWorkspace() {
               </Reveal>
             )}
 
-            {variables.length > 0 && !isMlModel && (
+            {variables.length > 0 && !isMlModel && !showsTransformSelector && (
               <Reveal delay={0.14}>
                 <MetricsSelector
                   options={summaryOptions}
@@ -565,6 +600,26 @@ export default function CalculatorWorkspace() {
                 advanced={timeSeriesAdvanced}
                 onOptionsChange={setTimeSeriesOptions}
                 onAdvancedChange={setTimeSeriesAdvanced}
+                />
+              </Reveal>
+            )}
+
+            {isFeatureScaling && variables.length > 0 && (
+              <Reveal delay={0.16}>
+                <FeatureTransformSelector
+                  value={featureTransformMethod}
+                  onChange={setFeatureTransformMethod}
+                  purpose="scaling"
+                />
+              </Reveal>
+            )}
+
+            {isDataNormalization && variables.length > 0 && (
+              <Reveal delay={0.16}>
+                <FeatureTransformSelector
+                  value={normalizationMethod}
+                  onChange={setNormalizationMethod}
+                  purpose="normalization"
                 />
               </Reveal>
             )}

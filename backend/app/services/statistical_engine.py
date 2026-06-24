@@ -39,7 +39,8 @@ from app.services.classification_models import classification_models
 from app.services.regression_models import regression_models
 from app.services.time_series_models import time_series_models
 from app.utils.data_parser import parse_csv
-from app.services.chart_helpers import enrich_chart_data, histogram_bins
+from app.services.chart_helpers import build_qq_plot, enrich_chart_data, histogram_bins
+from app.services.ml_preprocessing import METHOD_LABELS, apply_feature_method
 
 
 def _response(
@@ -1104,6 +1105,128 @@ def bartlett_test(df: pd.DataFrame, options: dict) -> AnalysisResponse:
     )
 
 
+def feature_scaling(df: pd.DataFrame, options: dict) -> AnalysisResponse:
+    columns = resolve_value_columns(df, options)
+    if not columns:
+        columns = numeric_columns(df)
+    method = str(options.get("transform_method", options.get("scaler_type", "standard")))
+    transformed, meta = apply_feature_method(df, columns, method)
+    label = METHOD_LABELS.get(meta["method"], meta["method"])
+    applied_cols = meta["columns"]
+    csv_content = transformed.to_csv(index=False)
+
+    stats = [
+        StatResult(label="Method", value=label),
+        StatResult(label="Columns transformed", value=str(len(applied_cols))),
+        StatResult(label="Rows", value=str(len(transformed))),
+    ]
+    for col in applied_cols[:4]:
+        series = pd.to_numeric(transformed[col], errors="coerce")
+        stats.append(StatResult(label=f"Mean ({col})", value=f"{series.mean():.4f}"))
+        stats.append(StatResult(label=f"SD ({col})", value=f"{series.std(ddof=1):.4f}"))
+
+    interpretation = (
+        f"Applied {label} to {len(applied_cols)} numeric column(s). "
+        "Download the transformed dataset below for use in further analysis or modeling."
+    )
+
+    return _response(
+        "feature-scaling",
+        "Feature Scaling & Transformations",
+        stats,
+        interpretation,
+        chart_data={
+            "downloads": [
+                {
+                    "label": "Transformed dataset",
+                    "filename": f"feature-scaling-{meta['method']}.csv",
+                    "content": csv_content,
+                    "format": "csv",
+                }
+            ]
+        },
+    )
+
+
+def normalize_data(df: pd.DataFrame, options: dict) -> AnalysisResponse:
+    columns = resolve_value_columns(df, options)
+    if not columns:
+        columns = numeric_columns(df)
+    if not columns:
+        raise DataValidationError("Select at least one numeric column to normalize.")
+
+    method = str(options.get("transform_method", "quantile"))
+    transformed, meta = apply_feature_method(df, columns, method)
+    label = METHOD_LABELS.get(meta["method"], meta["method"])
+    applied_cols = meta["columns"]
+
+    result_stats: list[StatResult] = [
+        StatResult(label="Method", value=label),
+        StatResult(label="Columns normalized", value=str(len(applied_cols))),
+        StatResult(label="Rows", value=str(len(transformed))),
+    ]
+
+    for col in applied_cols[:3]:
+        before = pd.to_numeric(df[col], errors="coerce").dropna().to_numpy()
+        after = pd.to_numeric(transformed[col], errors="coerce").dropna().to_numpy()
+        if len(before) >= 3:
+            _, p_before = stats.shapiro(before[:5000])
+            result_stats.append(
+                StatResult(
+                    label=f"Shapiro p before ({col})",
+                    value=format_p(p_before),
+                    badge=significance_badge(p_before),
+                )
+            )
+        if len(after) >= 3:
+            _, p_after = stats.shapiro(after[:5000])
+            result_stats.append(
+                StatResult(
+                    label=f"Shapiro p after ({col})",
+                    value=format_p(p_after),
+                    badge=significance_badge(p_after),
+                )
+            )
+
+    primary_col = applied_cols[0]
+    after_arr = pd.to_numeric(transformed[primary_col], errors="coerce").dropna().to_numpy()
+    bins = min(10, max(3, len(after_arr) // 2))
+    qq_points = build_qq_plot(after_arr)
+    original_subset = df[applied_cols].copy()
+    downloads = [
+        {
+            "label": "Normalized data",
+            "filename": f"normalized-{method}.csv",
+            "content": transformed.to_csv(index=False),
+            "format": "csv",
+        },
+        {
+            "label": "Original data",
+            "filename": "original-data.csv",
+            "content": original_subset.to_csv(index=False),
+            "format": "csv",
+        },
+    ]
+
+    interpretation = (
+        f"Applied {label} to {len(applied_cols)} column(s). "
+        "Compare Shapiro-Wilk p-values before and after normalization. "
+        "Download the normalized dataset below for further analysis."
+    )
+
+    return _response(
+        "normalize-data",
+        "Normalize Data",
+        result_stats,
+        interpretation,
+        chart_data={
+            "qq_plot": qq_points,
+            "histogram": histogram_bins(after_arr, bins),
+            "downloads": downloads,
+        },
+    )
+
+
 # ── Other ────────────────────────────────────────────────────────────────────
 
 
@@ -1263,6 +1386,8 @@ TEST_REGISTRY: dict[str, Callable[[pd.DataFrame, dict], AnalysisResponse]] = {
     "anderson-darling": anderson_darling,
     "levene-test": levene_test,
     "bartlett-test": bartlett_test,
+    "feature-scaling": feature_scaling,
+    "normalize-data": normalize_data,
     "factor-analysis": factor_analysis,
     "cluster-analysis": cluster_analysis,
     "cronbach-alpha": cronbach_alpha,
@@ -1456,6 +1581,8 @@ def list_tests() -> list[dict[str, str]]:
         "anderson-darling": "Anderson-Darling Test",
         "levene-test": "Levene's Test",
         "bartlett-test": "Bartlett's Test",
+        "feature-scaling": "Feature Scaling & Transformations",
+        "normalize-data": "Normalize Data",
         "factor-analysis": "Factor Analysis",
         "cluster-analysis": "Cluster Analysis",
         "cronbach-alpha": "Cronbach's Alpha",

@@ -16,6 +16,7 @@ import type {
   FeatureEngineeringSettings,
   PreprocessingSettings,
 } from "@/lib/classificationAdvanced";
+import { ML_SCALER_OPTIONS } from "@/lib/featureTransform";
 
 type ClassificationModelSelectorProps = {
   options: ClassificationOptions;
@@ -325,11 +326,10 @@ export default function ClassificationModelSelector({
                         scalerType: value as FeatureEngineeringSettings["scalerType"],
                       })
                     }
-                    options={[
-                      { value: "standard", label: "StandardScaler" },
-                      { value: "minmax", label: "MinMaxScaler" },
-                      { value: "robust", label: "RobustScaler" },
-                    ]}
+                    options={ML_SCALER_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
                     help="Applied before model training when scaling is enabled."
                   />
                 </div>

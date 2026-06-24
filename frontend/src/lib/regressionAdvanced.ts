@@ -7,7 +7,13 @@ import {
 
 export type MissingValuesStrategy = "drop" | "impute_mean" | "impute_median" | "none";
 export type ValidationStrategy = "kfold" | "shuffle_split";
-export type ScalerType = "standard" | "minmax" | "robust";
+export type ScalerType =
+  | "standard"
+  | "minmax"
+  | "robust"
+  | "maxabs"
+  | "quantile"
+  | "power";
 
 export type PreprocessingSettings = {
   missingValues: MissingValuesStrategy;

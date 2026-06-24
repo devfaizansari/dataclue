@@ -5,6 +5,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from scipy import stats
+
 from app.schemas.common import AnalysisResponse
 from app.services.column_utils import (
     aligned_two_numeric,
@@ -15,6 +17,7 @@ from app.services.column_utils import (
     value_and_group,
 )
 from app.core.exceptions import DataValidationError
+from app.services.ml_preprocessing import apply_feature_method
 
 
 def histogram_bins(arr: np.ndarray, bins: int = 10) -> list[dict[str, str | int]]:
@@ -23,6 +26,69 @@ def histogram_bins(arr: np.ndarray, bins: int = 10) -> list[dict[str, str | int]
         {"bin": f"{edges[i]:.1f}–{edges[i + 1]:.1f}", "count": int(counts[i])}
         for i in range(len(counts))
     ]
+
+
+def build_qq_plot(arr: np.ndarray) -> list[dict[str, float]]:
+    values = np.sort(np.asarray(arr, dtype=float))
+    values = values[np.isfinite(values)]
+    if len(values) < 2:
+        return []
+    n = len(values)
+    probs = (np.arange(1, n + 1) - 0.5) / n
+    theoretical = stats.norm.ppf(probs)
+    return [
+        {"theoretical": round(float(t), 4), "sample": round(float(s), 4)}
+        for t, s in zip(theoretical, values, strict=False)
+    ]
+
+
+def dataframe_to_csv(df: pd.DataFrame) -> str:
+    return df.to_csv(index=False)
+
+
+def build_variable_csv(arr: np.ndarray, variable_name: str) -> str:
+    values = np.asarray(arr, dtype=float)
+    values = values[np.isfinite(values)]
+    frame = pd.DataFrame({variable_name: values})
+    return dataframe_to_csv(frame)
+
+
+def build_qq_csv(qq_points: list[dict[str, float]], variable_name: str) -> str:
+    frame = pd.DataFrame(qq_points)
+    frame.columns = [f"theoretical_quantile_{variable_name}", f"sample_quantile_{variable_name}"]
+    return dataframe_to_csv(frame)
+
+
+def build_normalized_variable_csv(
+    df: pd.DataFrame,
+    options: dict | None,
+    method: str = "quantile",
+) -> tuple[str, str]:
+    series = first_numeric(df, options)
+    variable_name = str(
+        options.get("value_column") if options else None
+        or series.name
+        or "variable"
+    )
+    frame = pd.DataFrame({variable_name: pd.to_numeric(series, errors="coerce")}).dropna()
+    transformed, _ = apply_feature_method(frame, [variable_name], method)
+    return dataframe_to_csv(transformed), variable_name
+
+
+def append_download(
+    downloads: list[dict[str, str]],
+    label: str,
+    filename: str,
+    content: str,
+) -> None:
+    downloads.append(
+        {
+            "label": label,
+            "filename": filename,
+            "content": content,
+            "format": "csv",
+        }
+    )
 
 
 def build_group_means_chart(df: pd.DataFrame, options: dict | None = None) -> list[dict[str, str | float]]:
@@ -61,6 +127,13 @@ HISTOGRAM_TESTS = {
     "shapiro-wilk",
     "kolmogorov-smirnov",
     "anderson-darling",
+}
+
+QQ_PLOT_TESTS = {
+    "shapiro-wilk",
+    "kolmogorov-smirnov",
+    "anderson-darling",
+    "one-sample-ttest",
 }
 
 SCATTER_TESTS = {
@@ -191,6 +264,50 @@ def enrich_chart_data(
                 chart_data["frequency"] = [
                     {"label": f"Cluster {i}", "count": int(c)} for i, c in counts.items()
                 ]
+
+        if "qq_plot" not in chart_data and test_id in QQ_PLOT_TESTS:
+            series = first_numeric(df, options)
+            arr = series.to_numpy()
+            qq_points = build_qq_plot(arr)
+            if qq_points:
+                chart_data["qq_plot"] = qq_points
+
+        if "downloads" not in chart_data and test_id in QQ_PLOT_TESTS:
+            series = first_numeric(df, options)
+            arr = series.to_numpy()
+            variable_name = str(
+                response.variable_name
+                or options.get("value_column")
+                or series.name
+                or "variable"
+            )
+            downloads: list[dict[str, str]] = []
+            append_download(
+                downloads,
+                "Variable data",
+                f"{test_id}-{variable_name}.csv",
+                build_variable_csv(arr, variable_name),
+            )
+            qq_points = chart_data.get("qq_plot") or build_qq_plot(arr)
+            if qq_points:
+                append_download(
+                    downloads,
+                    "Q-Q plot data",
+                    f"{test_id}-{variable_name}-qq.csv",
+                    build_qq_csv(qq_points, variable_name),
+                )
+            try:
+                normalized_csv, normalized_name = build_normalized_variable_csv(df, options)
+                append_download(
+                    downloads,
+                    "Normalized data",
+                    f"{test_id}-{normalized_name}-normalized.csv",
+                    normalized_csv,
+                )
+            except DataValidationError:
+                pass
+            if downloads:
+                chart_data["downloads"] = downloads
     except (DataValidationError, ValueError, KeyError):
         pass
 

@@ -8,7 +8,13 @@ import {
 export type MissingValuesStrategy = "drop" | "impute_mean" | "impute_median" | "none";
 export type ValidationStrategy = "kfold" | "stratified_kfold" | "shuffle_split";
 export type ImbalanceStrategy = "none" | "smote" | "undersample";
-export type ScalerType = "standard" | "minmax" | "robust";
+export type ScalerType =
+  | "standard"
+  | "minmax"
+  | "robust"
+  | "maxabs"
+  | "quantile"
+  | "power";
 export type HyperparameterMode = "manual" | "grid_search";
 export type AdaBoostBaseEstimator = "depth_1" | "depth_2";
 
