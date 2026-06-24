@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -9,7 +10,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.database import get_blogs_collection
 from app.core.exceptions import DataValidationError
-from app.schemas.blog import BlogCreate, BlogResponse, BlogUpdate
+from app.schemas.blog import BlogCreate, BlogListResponse, BlogResponse, BlogUpdate
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -26,6 +27,22 @@ def _serialize_content(content: list[Any]) -> list[dict[str, Any]]:
     return [block.model_dump() if hasattr(block, "model_dump") else dict(block) for block in content]
 
 
+def _resolve_created_at(doc: dict[str, Any]) -> datetime:
+    created = doc.get("created_at")
+    if isinstance(created, datetime):
+        return created if created.tzinfo else created.replace(tzinfo=UTC)
+
+    legacy_date = doc.get("date")
+    if legacy_date:
+        try:
+            parsed = datetime.fromisoformat(str(legacy_date))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            return datetime.strptime(str(legacy_date), "%Y-%m-%d").replace(tzinfo=UTC)
+
+    return datetime.now(UTC)
+
+
 def _doc_to_response(doc: dict[str, Any]) -> BlogResponse:
     return BlogResponse(
         id=str(doc["_id"]),
@@ -34,8 +51,7 @@ def _doc_to_response(doc: dict[str, Any]) -> BlogResponse:
         excerpt=doc["excerpt"],
         category=doc["category"],
         author=doc["author"],
-        date=doc["date"],
-        read_time=doc.get("read_time", "5 min read"),
+        created_at=_resolve_created_at(doc),
         content=doc.get("content", []),
         published=bool(doc.get("published", True)),
         seo_title=doc.get("seo_title"),
@@ -45,10 +61,46 @@ def _doc_to_response(doc: dict[str, Any]) -> BlogResponse:
     )
 
 
-def list_blogs(*, published_only: bool = True) -> list[BlogResponse]:
+def list_blogs(
+    *,
+    published_only: bool = True,
+    page: int = 1,
+    page_size: int = 9,
+    search: str | None = None,
+) -> tuple[list[BlogResponse], int]:
     query: dict[str, Any] = {"published": True} if published_only else {}
-    cursor = get_blogs_collection().find(query).sort("date", -1)
-    return [_doc_to_response(doc) for doc in cursor]
+    trimmed_search = (search or "").strip()
+    if trimmed_search:
+        pattern = re.escape(trimmed_search)
+        regex = {"$regex": pattern, "$options": "i"}
+        query["$or"] = [
+            {"title": regex},
+            {"excerpt": regex},
+            {"category": regex},
+            {"author": regex},
+        ]
+
+    collection = get_blogs_collection()
+    total = collection.count_documents(query)
+    skip = max(page - 1, 0) * page_size
+    cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+    return [_doc_to_response(doc) for doc in cursor], total
+
+
+def build_blog_list_response(
+    blogs: list[BlogResponse],
+    total: int,
+    page: int,
+    page_size: int,
+) -> BlogListResponse:
+    total_pages = max(1, math.ceil(total / page_size)) if total else 1
+    return BlogListResponse(
+        blogs=blogs,
+        count=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
 
 
 def get_blog_by_slug(slug: str, *, published_only: bool = True) -> BlogResponse | None:
@@ -78,8 +130,6 @@ def create_blog(payload: BlogCreate) -> BlogResponse:
         "excerpt": payload.excerpt.strip(),
         "category": payload.category.strip(),
         "author": payload.author.strip(),
-        "date": payload.date,
-        "read_time": payload.read_time.strip(),
         "content": _serialize_content(payload.content),
         "published": payload.published,
         "seo_title": payload.seo_title,
@@ -115,9 +165,13 @@ def update_blog(blog_id: str, payload: BlogUpdate) -> BlogResponse:
         if not SLUG_PATTERN.match(updates["slug"]):
             raise DataValidationError("Slug must use lowercase letters, numbers, and hyphens only")
 
-    for text_field in ("title", "excerpt", "category", "author", "read_time", "seo_title", "seo_description", "seo_keywords", "og_image"):
+    for text_field in ("title", "excerpt", "category", "author", "seo_title", "seo_description", "seo_keywords", "og_image"):
         if text_field in updates and isinstance(updates[text_field], str):
             updates[text_field] = updates[text_field].strip() or None
+
+    updates.pop("created_at", None)
+    updates.pop("date", None)
+    updates.pop("read_time", None)
 
     if "content" in updates and updates["content"] is not None:
         updates["content"] = _serialize_content(updates["content"])
@@ -160,11 +214,20 @@ def seed_blogs_if_empty() -> int:
     now = datetime.now(UTC)
     documents = []
     for item in BLOG_SEED_DATA:
+        legacy_date = item.get("date")
+        if legacy_date:
+            created_at = datetime.strptime(str(legacy_date), "%Y-%m-%d").replace(tzinfo=UTC)
+        else:
+            created_at = now
         documents.append(
             {
-                **item,
-                "created_at": now,
-                "updated_at": now,
+                key: value
+                for key, value in item.items()
+                if key not in {"date", "read_time"}
+            }
+            | {
+                "created_at": created_at,
+                "updated_at": created_at,
             }
         )
 

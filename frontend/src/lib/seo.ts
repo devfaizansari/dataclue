@@ -132,7 +132,7 @@ export function articleJsonLd(post: BlogPost) {
     headline: seo.title,
     description: seo.description,
     keywords: seo.keywords.length ? seo.keywords.join(", ") : undefined,
-    datePublished: post.date,
+    datePublished: post.createdAt,
     author: {
       "@type": "Person",
       name: post.author,

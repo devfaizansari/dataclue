@@ -6,15 +6,19 @@ import { useRouter } from "next/navigation";
 import AdminShell from "./AdminShell";
 import BlogMessageModal, { type BlogMessageModalState } from "./BlogMessageModal";
 import DeleteConfirmModal from "./DeleteConfirmModal";
+import Pagination from "@/components/ui/Pagination";
 import { deleteBlog, fetchAdminBlogs } from "@/lib/blogApi";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { ApiError } from "@/lib/api";
 import type { BlogPost } from "@/lib/types/blog";
-import { formatBlogDate } from "@/lib/types/blog";
+import { ADMIN_BLOGS_PAGE_SIZE, formatBlogDate } from "@/lib/types/blog";
 
 export default function AdminBlogList() {
   const router = useRouter();
   const [blogs, setBlogs] = useState<BlogPost[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blogToDelete, setBlogToDelete] = useState<BlogPost | null>(null);
@@ -26,12 +30,22 @@ export default function AdminBlogList() {
     message: "",
   });
 
-  const loadBlogs = async () => {
+  const loadBlogs = async (targetPage = page) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAdminBlogs();
-      setBlogs(data);
+      const data = await fetchAdminBlogs({
+        page: targetPage,
+        pageSize: ADMIN_BLOGS_PAGE_SIZE,
+      });
+      setBlogs(data.blogs);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotalCount(data.count);
+
+      if (data.blogs.length === 0 && targetPage > 1) {
+        await loadBlogs(targetPage - 1);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         router.replace("/admin/login");
@@ -48,8 +62,9 @@ export default function AdminBlogList() {
       router.replace("/admin/login");
       return;
     }
-    loadBlogs();
-  }, [router]);
+    loadBlogs(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, page]);
 
   const closeMessage = () => {
     setMessageModal((current) => ({ ...current, open: false }));
@@ -61,7 +76,6 @@ export default function AdminBlogList() {
     setDeleting(true);
     try {
       await deleteBlog(blogToDelete.id);
-      setBlogs((current) => current.filter((item) => item.id !== blogToDelete.id));
       setBlogToDelete(null);
       setMessageModal({
         open: true,
@@ -69,6 +83,7 @@ export default function AdminBlogList() {
         title: "Blog deleted",
         message: `"${blogToDelete.title}" has been permanently removed.`,
       });
+      await loadBlogs(page);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Delete failed. Please try again.";
       setMessageModal({
@@ -93,7 +108,7 @@ export default function AdminBlogList() {
           </div>
         )}
 
-        {!loading && !error && blogs.length === 0 && (
+        {!loading && !error && totalCount === 0 && (
           <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center">
             <p className="text-foreground">No blog posts yet.</p>
             <Link href="/admin/blogs/new" className="mt-3 inline-block text-sm font-semibold text-primary">
@@ -103,65 +118,73 @@ export default function AdminBlogList() {
         )}
 
         {!loading && blogs.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-surface-muted">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-foreground">Title</th>
-                  <th className="hidden px-4 py-3 text-left font-semibold text-foreground md:table-cell">
-                    Category
-                  </th>
-                  <th className="hidden px-4 py-3 text-left font-semibold text-foreground lg:table-cell">
-                    Date
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
-                  <th className="px-4 py-3 text-right font-semibold text-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {blogs.map((blog) => (
-                  <tr key={blog.id ?? blog.slug}>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">{blog.title}</p>
-                      <p className="text-xs text-muted">/{blog.slug}</p>
-                    </td>
-                    <td className="hidden px-4 py-3 text-muted md:table-cell">{blog.category}</td>
-                    <td className="hidden px-4 py-3 text-muted lg:table-cell">
-                      {formatBlogDate(blog.date)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          blog.published
-                            ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
-                            : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                        }`}
-                      >
-                        {blog.published ? "Published" : "Draft"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <Link
-                          href={`/admin/blogs/${blog.id}/edit`}
-                          className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-muted"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setBlogToDelete(blog)}
-                          disabled={deleting && blogToDelete?.id === blog.id}
-                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Showing {blogs.length} of {totalCount} post{totalCount === 1 ? "" : "s"}
+            </p>
+
+            <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-surface-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">Title</th>
+                    <th className="hidden px-4 py-3 text-left font-semibold text-foreground md:table-cell">
+                      Category
+                    </th>
+                    <th className="hidden px-4 py-3 text-left font-semibold text-foreground lg:table-cell">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
+                    <th className="px-4 py-3 text-right font-semibold text-foreground">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {blogs.map((blog) => (
+                    <tr key={blog.id ?? blog.slug}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground">{blog.title}</p>
+                        <p className="text-xs text-muted">/{blog.slug}</p>
+                      </td>
+                      <td className="hidden px-4 py-3 text-muted md:table-cell">{blog.category}</td>
+                      <td className="hidden px-4 py-3 text-muted lg:table-cell">
+                        {formatBlogDate(blog.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            blog.published
+                              ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                          }`}
+                        >
+                          {blog.published ? "Published" : "Draft"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <Link
+                            href={`/admin/blogs/${blog.id}/edit`}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface-muted"
+                          >
+                            Edit
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setBlogToDelete(blog)}
+                            disabled={deleting && blogToDelete?.id === blog.id}
+                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
       </AdminShell>

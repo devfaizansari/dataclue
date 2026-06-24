@@ -1,10 +1,20 @@
 import { ApiError } from "@/lib/api";
-import type { BlogListResponse, BlogPost } from "@/lib/types/blog";
+import type { BlogListParams, BlogListResponse, BlogPost } from "@/lib/types/blog";
+import { ADMIN_BLOGS_PAGE_SIZE, PUBLIC_BLOGS_PAGE_SIZE } from "@/lib/types/blog";
 import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/adminAuth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 type BlogPayload = Omit<BlogPost, "id">;
+
+function buildBlogListQuery(params?: BlogListParams): string {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
+  if (params?.search?.trim()) searchParams.set("search", params.search.trim());
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
 
 async function request<T>(path: string, init?: RequestInit, auth = false): Promise<T> {
   const headers: Record<string, string> = {
@@ -47,9 +57,10 @@ async function request<T>(path: string, init?: RequestInit, auth = false): Promi
   return response.json() as Promise<T>;
 }
 
-export async function fetchPublishedBlogs(): Promise<BlogPost[]> {
-  const data = await request<BlogListResponse>("/blogs");
-  return data.blogs;
+export async function fetchPublishedBlogs(
+  params: BlogListParams = { page: 1, pageSize: PUBLIC_BLOGS_PAGE_SIZE },
+): Promise<BlogListResponse> {
+  return request<BlogListResponse>(`/blogs${buildBlogListQuery(params)}`);
 }
 
 export async function fetchPublishedBlogBySlug(slug: string): Promise<BlogPost | null> {
@@ -100,9 +111,10 @@ export async function updateAdminCredentials(payload: {
   return data;
 }
 
-export async function fetchAdminBlogs(): Promise<BlogPost[]> {
-  const data = await request<BlogListResponse>("/admin/blogs", undefined, true);
-  return data.blogs;
+export async function fetchAdminBlogs(
+  params: BlogListParams = { page: 1, pageSize: ADMIN_BLOGS_PAGE_SIZE },
+): Promise<BlogListResponse> {
+  return request<BlogListResponse>(`/admin/blogs${buildBlogListQuery(params)}`, undefined, true);
 }
 
 export async function fetchAdminBlogById(id: string): Promise<BlogPost> {
@@ -142,14 +154,25 @@ export async function deleteBlog(id: string): Promise<void> {
 }
 
 export async function fetchPublishedBlogsServer(): Promise<BlogPost[]> {
-  const response = await fetch(`${API_BASE}/blogs`, {
-    next: { revalidate: 60 },
-  });
-  if (!response.ok) {
-    return [];
-  }
-  const data = (await response.json()) as BlogListResponse;
-  return data.blogs;
+  const allBlogs: BlogPost[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const response = await fetch(
+      `${API_BASE}/blogs${buildBlogListQuery({ page, pageSize: 50 })}`,
+      { next: { revalidate: 60 } },
+    );
+    if (!response.ok) {
+      break;
+    }
+    const data = (await response.json()) as BlogListResponse;
+    allBlogs.push(...data.blogs);
+    totalPages = data.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+
+  return allBlogs;
 }
 
 export async function fetchPublishedBlogBySlugServer(slug: string): Promise<BlogPost | null> {

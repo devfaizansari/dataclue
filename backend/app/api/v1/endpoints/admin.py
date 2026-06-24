@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.config import get_settings
 from app.core.exceptions import DataValidationError
@@ -22,6 +22,7 @@ from app.schemas.blog import (
 )
 from app.services.admin_service import get_admin_username, update_admin_credentials
 from app.services.blog_service import (
+    build_blog_list_response,
     create_blog,
     delete_blog,
     get_blog_by_id,
@@ -76,9 +77,19 @@ def admin_update_credentials(
 
 
 @router.get("/blogs", response_model=BlogListResponse)
-def admin_list_blogs(_admin: dict[str, Any] = Depends(get_current_admin)) -> BlogListResponse:
-    blogs = list_blogs(published_only=False)
-    return BlogListResponse(blogs=blogs, count=len(blogs))
+def admin_list_blogs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50, alias="pageSize"),
+    search: str | None = Query(None, max_length=200),
+    _admin: dict[str, Any] = Depends(get_current_admin),
+) -> BlogListResponse:
+    blogs, total = list_blogs(
+        published_only=False,
+        page=page,
+        page_size=page_size,
+        search=search,
+    )
+    return build_blog_list_response(blogs, total, page, page_size)
 
 
 @router.get("/blogs/{blog_id}", response_model=BlogResponse)

@@ -31,9 +31,8 @@ export default function BlogCard({ post }: BlogCardProps) {
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground">{post.author}</span>
           <span>·</span>
-          <time dateTime={post.date}>{formatBlogDate(post.date)}</time>
+          <time dateTime={post.createdAt}>{formatBlogDate(post.createdAt)}</time>
         </div>
-        <span>{post.readTime}</span>
       </div>
     </MotionCard>
   );

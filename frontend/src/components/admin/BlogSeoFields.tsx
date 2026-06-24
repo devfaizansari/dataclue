@@ -37,8 +37,7 @@ export default function BlogSeoFields({ form, onChange }: BlogSeoFieldsProps) {
     ...form,
     category: "",
     author: "",
-    date: "",
-    readTime: "",
+    createdAt: new Date().toISOString(),
     content: [],
   });
 

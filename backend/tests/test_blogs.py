@@ -28,6 +28,17 @@ def test_public_blogs_list(client: TestClient) -> None:
     data = response.json()
     assert "blogs" in data
     assert data["count"] >= 0
+    assert data["page"] == 1
+    assert data["pageSize"] == 9
+    assert data["totalPages"] >= 1
+
+
+def test_public_blogs_pagination(client: TestClient) -> None:
+    response = client.get("/api/v1/blogs?page=1&pageSize=2")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["blogs"]) <= 2
+    assert data["pageSize"] == 2
 
 
 def test_admin_credentials_update(client: TestClient) -> None:
@@ -75,7 +86,6 @@ def test_admin_blog_crud(client: TestClient) -> None:
             "category": "Testing",
             "author": "Pytest",
             "date": "2026-06-16",
-            "readTime": "2 min read",
             "published": True,
             "content": [{"type": "paragraph", "text": "Hello from pytest."}],
         },
@@ -83,6 +93,7 @@ def test_admin_blog_crud(client: TestClient) -> None:
     assert create.status_code == 201
     blog = create.json()
     blog_id = blog["id"]
+    assert "createdAt" in blog
 
     public = client.get("/api/v1/blogs/pytest-sample-blog")
     assert public.status_code == 200

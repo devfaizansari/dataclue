@@ -41,9 +41,7 @@ export default function BlogPostView({ post }: BlogPostViewProps) {
         <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
           <span className="font-medium text-foreground">{post.author}</span>
           <span aria-hidden>·</span>
-          <time dateTime={post.date}>{formatBlogDate(post.date)}</time>
-          <span aria-hidden>·</span>
-          <span>{post.readTime}</span>
+          <time dateTime={post.createdAt}>{formatBlogDate(post.createdAt)}</time>
         </div>
       </header>
 

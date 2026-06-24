@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -26,13 +27,6 @@ class BlogBase(BaseModel):
     excerpt: str = Field(..., min_length=1, max_length=500)
     category: str = Field(..., min_length=1, max_length=100)
     author: str = Field(..., min_length=1, max_length=120)
-    date: str = Field(..., description="ISO date YYYY-MM-DD")
-    read_time: str = Field(
-        default="5 min read",
-        max_length=40,
-        alias="readTime",
-        serialization_alias="readTime",
-    )
     content: list[BlogContentBlock] = Field(..., min_length=1)
     published: bool = True
     seo_title: str | None = Field(
@@ -78,13 +72,6 @@ class BlogUpdate(BaseModel):
     excerpt: str | None = Field(default=None, min_length=1, max_length=500)
     category: str | None = Field(default=None, min_length=1, max_length=100)
     author: str | None = Field(default=None, min_length=1, max_length=120)
-    date: str | None = None
-    read_time: str | None = Field(
-        default=None,
-        max_length=40,
-        alias="readTime",
-        serialization_alias="readTime",
-    )
     content: list[BlogContentBlock] | None = None
     published: bool | None = None
     seo_title: str | None = Field(
@@ -120,11 +107,17 @@ class BlogUpdate(BaseModel):
 
 class BlogResponse(BlogBase):
     id: str
+    created_at: datetime = Field(alias="createdAt", serialization_alias="createdAt")
 
 
 class BlogListResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     blogs: list[BlogResponse]
     count: int
+    page: int = 1
+    page_size: int = Field(default=9, alias="pageSize", serialization_alias="pageSize")
+    total_pages: int = Field(default=1, alias="totalPages", serialization_alias="totalPages")
 
 
 class AdminLoginRequest(BaseModel):

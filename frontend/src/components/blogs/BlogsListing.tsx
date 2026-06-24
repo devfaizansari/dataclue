@@ -1,19 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import BlogCard from "./BlogCard";
 import Stagger from "@/components/motion/Stagger";
 import StaggerItem from "@/components/motion/StaggerItem";
+import Pagination from "@/components/ui/Pagination";
 import { fetchPublishedBlogs } from "@/lib/blogApi";
 import type { BlogPost } from "@/lib/types/blog";
+import { PUBLIC_BLOGS_PAGE_SIZE } from "@/lib/types/blog";
 import { fadeUp, EASE_OUT } from "@/lib/motion";
 
 export default function BlogsListing() {
-  const [search, setSearch] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const searchFromUrl = searchParams.get("search") ?? "";
+
+  const [search, setSearch] = useState(searchFromUrl);
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [page, setPage] = useState(pageFromUrl);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSearch(searchFromUrl);
+    setPage(pageFromUrl);
+  }, [pageFromUrl, searchFromUrl]);
 
   useEffect(() => {
     let active = true;
@@ -22,12 +38,21 @@ export default function BlogsListing() {
       setLoading(true);
       setError(null);
       try {
-        const blogs = await fetchPublishedBlogs();
-        if (active) setPosts(blogs);
+        const data = await fetchPublishedBlogs({
+          page,
+          pageSize: PUBLIC_BLOGS_PAGE_SIZE,
+          search: searchFromUrl || undefined,
+        });
+        if (!active) return;
+        setPosts(data.blogs);
+        setTotalPages(data.totalPages);
+        setTotalCount(data.count);
       } catch {
         if (active) {
           setError("Could not load blogs. Is the backend and MongoDB running?");
           setPosts([]);
+          setTotalPages(1);
+          setTotalCount(0);
         }
       } finally {
         if (active) setLoading(false);
@@ -38,24 +63,30 @@ export default function BlogsListing() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [page, searchFromUrl]);
 
-  const query = search.trim().toLowerCase();
+  const updateQuery = (nextPage: number, nextSearch: string) => {
+    const params = new URLSearchParams();
+    if (nextPage > 1) params.set("page", String(nextPage));
+    if (nextSearch.trim()) params.set("search", nextSearch.trim());
+    const query = params.toString();
+    router.replace(query ? `/blogs?${query}` : "/blogs", { scroll: false });
+  };
 
-  const filteredPosts = posts.filter((post) => {
-    if (!query) return true;
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    updateQuery(1, search);
+  };
 
-    return (
-      post.title.toLowerCase().includes(query) ||
-      post.excerpt.toLowerCase().includes(query) ||
-      post.category.toLowerCase().includes(query) ||
-      post.author.toLowerCase().includes(query)
-    );
-  });
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage);
+    updateQuery(nextPage, searchFromUrl);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
-      <div className="relative mx-auto max-w-xl">
+      <form onSubmit={handleSearchSubmit} className="relative mx-auto max-w-xl">
         <svg
           className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
           fill="none"
@@ -76,7 +107,14 @@ export default function BlogsListing() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-xl border border-border bg-surface py-3.5 pl-11 pr-4 text-sm text-foreground placeholder:text-muted shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
-      </div>
+      </form>
+
+      {!loading && !error && totalCount > 0 && (
+        <p className="mt-4 text-center text-sm text-muted">
+          Showing {posts.length} of {totalCount} article{totalCount === 1 ? "" : "s"}
+          {searchFromUrl ? ` for "${searchFromUrl}"` : ""}
+        </p>
+      )}
 
       {loading && (
         <motion.div
@@ -95,17 +133,26 @@ export default function BlogsListing() {
         </div>
       )}
 
-      {!loading && !error && filteredPosts.length > 0 && (
-        <Stagger className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredPosts.map((post) => (
-            <StaggerItem key={post.slug}>
-              <BlogCard post={post} />
-            </StaggerItem>
-          ))}
-        </Stagger>
+      {!loading && !error && posts.length > 0 && (
+        <>
+          <Stagger className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {posts.map((post) => (
+              <StaggerItem key={post.slug}>
+                <BlogCard post={post} />
+              </StaggerItem>
+            ))}
+          </Stagger>
+
+          <Pagination
+            className="mt-10"
+            page={page}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        </>
       )}
 
-      {!loading && !error && filteredPosts.length === 0 && (
+      {!loading && !error && posts.length === 0 && (
         <motion.div
           className="mt-16 text-center"
           initial="hidden"
@@ -115,14 +162,17 @@ export default function BlogsListing() {
         >
           <p className="text-lg font-medium text-foreground">No blogs found</p>
           <p className="mt-2 text-sm text-muted">
-            {posts.length === 0
+            {totalCount === 0 && !searchFromUrl
               ? "No published blogs yet. Add one from the admin panel."
               : "Try a different search term or browse all articles."}
           </p>
-          {search && (
+          {searchFromUrl && (
             <button
               type="button"
-              onClick={() => setSearch("")}
+              onClick={() => {
+                setSearch("");
+                updateQuery(1, "");
+              }}
               className="mt-4 text-sm font-semibold text-primary hover:text-primary-dark"
             >
               Clear search

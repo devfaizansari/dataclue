@@ -9,7 +9,7 @@ import { createBlog, fetchAdminBlogById, updateBlog } from "@/lib/blogApi";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { ApiError } from "@/lib/api";
 import type { BlogContentBlock, BlogPost } from "@/lib/types/blog";
-import { estimateReadTime, slugifyTitle } from "@/lib/types/blog";
+import { formatBlogDate, slugifyTitle } from "@/lib/types/blog";
 
 type AdminBlogFormProps = {
   blogId?: string;
@@ -17,14 +17,12 @@ type AdminBlogFormProps = {
 
 const emptyBlock = (): BlogContentBlock => ({ type: "paragraph", text: "" });
 
-const defaultForm: Omit<BlogPost, "id"> = {
+const defaultForm: Omit<BlogPost, "id" | "createdAt"> = {
   slug: "",
   title: "",
   excerpt: "",
   category: "Research Tips",
   author: "dataclue Team",
-  date: new Date().toISOString().slice(0, 10),
-  readTime: "5 min read",
   content: [emptyBlock()],
   published: true,
   seoTitle: "",
@@ -36,7 +34,8 @@ const defaultForm: Omit<BlogPost, "id"> = {
 export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
   const router = useRouter();
   const isEdit = Boolean(blogId);
-  const [form, setForm] = useState<Omit<BlogPost, "id">>(defaultForm);
+  const [form, setForm] = useState<Omit<BlogPost, "id" | "createdAt">>(defaultForm);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
@@ -73,8 +72,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           excerpt: blog.excerpt,
           category: blog.category,
           author: blog.author,
-          date: blog.date,
-          readTime: blog.readTime,
           content: blog.content.length > 0 ? blog.content : [emptyBlock()],
           published: blog.published ?? true,
           seoTitle: blog.seoTitle ?? "",
@@ -82,6 +79,7 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
           seoKeywords: blog.seoKeywords ?? "",
           ogImage: blog.ogImage ?? "",
         });
+        setCreatedAt(blog.createdAt);
         setSlugTouched(true);
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
@@ -97,9 +95,9 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
     load();
   }, [blogId, router]);
 
-  const updateField = <K extends keyof Omit<BlogPost, "id">>(
+  const updateField = <K extends keyof Omit<BlogPost, "id" | "createdAt">>(
     key: K,
-    value: Omit<BlogPost, "id">[K],
+    value: Omit<BlogPost, "id" | "createdAt">[K],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -109,7 +107,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
       ...current,
       title,
       slug: slugTouched ? current.slug : slugifyTitle(title),
-      readTime: estimateReadTime(current.content),
     }));
   };
 
@@ -120,7 +117,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
       return {
         ...current,
         content,
-        readTime: estimateReadTime(content),
       };
     });
   };
@@ -130,7 +126,7 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
       const nextBlock: BlogContentBlock =
         type === "list" ? { type: "list", items: [""] } : { type, text: "" };
       const content = [...current.content, nextBlock];
-      return { ...current, content, readTime: estimateReadTime(content) };
+      return { ...current, content };
     });
   };
 
@@ -140,7 +136,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
       return {
         ...current,
         content: content.length > 0 ? content : [emptyBlock()],
-        readTime: estimateReadTime(content),
       };
     });
   };
@@ -177,7 +172,6 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
       seoKeywords: form.seoKeywords?.trim() || null,
       ogImage: form.ogImage?.trim() || null,
       content: filteredContent,
-      readTime: estimateReadTime(form.content),
     };
 
     if (payload.content.length === 0) {
@@ -297,16 +291,11 @@ export default function AdminBlogForm({ blogId }: AdminBlogFormProps) {
             />
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">Date</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => updateField("date", e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2.5 text-sm"
-              required
-            />
-          </div>
+          {isEdit && createdAt && (
+            <div className="sm:col-span-2 rounded-lg border border-border bg-surface-muted/40 px-3 py-2.5 text-sm text-muted">
+              Created: <span className="font-medium text-foreground">{formatBlogDate(createdAt)}</span>
+            </div>
+          )}
 
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-sm font-medium text-foreground">Excerpt</label>

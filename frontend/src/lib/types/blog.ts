@@ -10,8 +10,7 @@ export type BlogPost = {
   excerpt: string;
   category: string;
   author: string;
-  date: string;
-  readTime: string;
+  createdAt: string;
   content: BlogContentBlock[];
   published?: boolean;
   seoTitle?: string | null;
@@ -23,14 +22,31 @@ export type BlogPost = {
 export type BlogListResponse = {
   blogs: BlogPost[];
   count: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };
 
+export type BlogListParams = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+};
+
+export const PUBLIC_BLOGS_PAGE_SIZE = 9;
+export const ADMIN_BLOGS_PAGE_SIZE = 10;
+
 export function formatBlogDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
-  });
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 export function slugifyTitle(title: string): string {
@@ -41,17 +57,6 @@ export function slugifyTitle(title: string): string {
     .replace(/[\s_]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
-}
-
-export function estimateReadTime(content: BlogContentBlock[]): string {
-  const words = content.reduce((total, block) => {
-    if (block.type === "list") {
-      return total + block.items.join(" ").split(/\s+/).length;
-    }
-    return total + block.text.split(/\s+/).length;
-  }, 0);
-  const minutes = Math.max(1, Math.ceil(words / 200));
-  return `${minutes} min read`;
 }
 
 export type ResolvedBlogSeo = {

@@ -37,7 +37,7 @@ export async function generateMetadata({
     description: seo.description,
     path: `/blogs/${post.slug}`,
     openGraphType: "article",
-    publishedTime: post.date,
+    publishedTime: post.createdAt,
     authors: [post.author],
     keywords: seo.keywords,
     ogImage: seo.ogImage,
