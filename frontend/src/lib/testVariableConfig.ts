@@ -28,6 +28,21 @@ const valueAndGroup: VariableField[] = [
   { key: "group_column", label: "Group variable", type: "categorical", required: true },
 ];
 
+const oneWayAnova: VariableField[] = [
+  {
+    key: "value_columns",
+    label: "Dependent variable (long) or group columns (wide)",
+    type: "numeric[]",
+    required: true,
+  },
+  {
+    key: "group_column",
+    label: "Group variable (long format)",
+    type: "categorical",
+    required: false,
+  },
+];
+
 const twoNumeric: VariableField[] = [
   { key: "x_column", label: "Variable X (numeric)", type: "numeric", required: true },
   { key: "y_column", label: "Variable Y (numeric)", type: "numeric", required: true },
@@ -54,7 +69,12 @@ const TEST_FIELDS: Record<string, VariableField[]> = {
   ],
   "independent-ttest": valueAndGroup,
   "mann-whitney": valueAndGroup,
-  "one-way-anova": valueAndGroup,
+  "one-way-anova": oneWayAnova,
+  "two-way-anova": [
+    { key: "y_column", label: "Dependent variable (numeric)", type: "numeric", required: true },
+    { key: "factor_a_column", label: "Factor A", type: "categorical", required: true },
+    { key: "factor_b_column", label: "Factor B", type: "categorical", required: true },
+  ],
   "kruskal-wallis": valueAndGroup,
   "levene-test": valueAndGroup,
   "bartlett-test": valueAndGroup,
@@ -178,6 +198,17 @@ export function buildDefaultSelections(
       selections[field.key] = pickValueColumn(variables, "");
       continue;
     }
+    if (field.key === "factor_a_column") {
+      selections[field.key] = categorical[0] ?? "";
+      continue;
+    }
+    if (field.key === "factor_b_column") {
+      const factorA =
+        typeof selections.factor_a_column === "string" ? selections.factor_a_column : "";
+      selections[field.key] =
+        categorical.find((name) => name !== factorA) ?? categorical[1] ?? "";
+      continue;
+    }
     if (field.type === "numeric") {
       const used = Object.values(selections).flat().filter((v) => typeof v === "string") as string[];
       const pick = numeric.find((n) => !used.includes(n)) ?? numeric[0] ?? "";
@@ -203,7 +234,58 @@ export function validateVariableSelections(
         return `Select at least one ${field.label.toLowerCase()}.`;
       }
     }
+    if (field.required && field.type === "categorical") {
+      const value = selections[field.key];
+      if (typeof value !== "string" || !value) {
+        return `Select ${field.label.toLowerCase()}.`;
+      }
+    }
+    if (field.required && field.type === "numeric") {
+      const value = selections[field.key];
+      if (typeof value !== "string" || !value) {
+        return `Select ${field.label.toLowerCase()}.`;
+      }
+    }
   }
+
+  if (testId === "one-way-anova") {
+    const groupName = selections.group_column;
+    const valueCols = selections.value_columns;
+    const hasGroup = typeof groupName === "string" && groupName.length > 0;
+    const hasWide = Array.isArray(valueCols) && valueCols.length >= 2;
+    if (!hasGroup && !hasWide) {
+      return "Select a group column (long format) or at least 2 numeric columns (wide format).";
+    }
+    if (hasGroup) {
+      const groupVar = variables.find((item) => item.name === groupName);
+      if (groupVar?.unique_count !== undefined && groupVar.unique_count < 2) {
+        return `Column "${groupName}" has only one category. Pick a column like Group with values A and B.`;
+      }
+    }
+  }
+
+  if (testId === "two-way-anova") {
+    const factorA = selections.factor_a_column;
+    const factorB = selections.factor_b_column;
+    const yColumn = selections.y_column;
+    if (typeof factorA === "string" && typeof factorB === "string" && factorA === factorB) {
+      return "Factor A and Factor B must be different columns.";
+    }
+    if (typeof yColumn === "string") {
+      if (yColumn === factorA || yColumn === factorB) {
+        return "Dependent variable must be different from both factors.";
+      }
+    }
+    for (const key of ["factor_a_column", "factor_b_column"] as const) {
+      const name = selections[key];
+      if (typeof name !== "string" || !name) continue;
+      const variable = variables.find((item) => item.name === name);
+      if (variable?.unique_count !== undefined && variable.unique_count < 2) {
+        return `Column "${name}" has only one category. Choose a factor with at least 2 levels.`;
+      }
+    }
+  }
+
   return validateGroupSelections(testId, variables, selections);
 }
 
@@ -213,7 +295,7 @@ export function validateGroupSelections(
   selections: Record<string, string | string[]>,
 ): string | null {
   const fields = getVariableFieldsForTest(testId);
-  const needsGroup = fields.some((f) => f.key === "group_column");
+  const needsGroup = fields.some((f) => f.key === "group_column" && f.required);
   if (!needsGroup) return null;
 
   const groupName = selections.group_column;

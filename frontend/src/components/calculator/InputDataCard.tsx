@@ -6,6 +6,7 @@ import {
   parseUploadedFile,
   SUPPORTED_DATA_FILE_ACCEPT,
 } from "@/lib/parseUploadedFile";
+import RunAnalysisButton from "./RunAnalysisButton";
 
 type InputDataCardProps = {
   testId?: string;
@@ -14,6 +15,7 @@ type InputDataCardProps = {
   onRunAnalysis?: (data: string) => void;
   loading?: boolean;
   formatHint?: string;
+  runAnalysisAnchorRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 export default function InputDataCard({
@@ -23,6 +25,7 @@ export default function InputDataCard({
   onRunAnalysis,
   loading = false,
   formatHint,
+  runAnalysisAnchorRef,
 }: InputDataCardProps) {
   const resolvedSample = testId ? getSampleCsvForTest(testId) : sampleCsvData;
   const [data, setData] = useState(initialData ?? resolvedSample);
@@ -124,18 +127,8 @@ export default function InputDataCard({
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{uploadError}</p>
         )}
 
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={handleRunAnalysis}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60 btn-motion"
-          >
-            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-            {loading ? "Running…" : "Run Analysis"}
-          </button>
+        <div ref={runAnalysisAnchorRef} className="mt-5 flex justify-end">
+          <RunAnalysisButton loading={loading} onClick={handleRunAnalysis} />
         </div>
       </div>
     </div>

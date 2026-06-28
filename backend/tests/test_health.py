@@ -495,3 +495,135 @@ def test_normalize_data_includes_normalized_download(client: TestClient) -> None
     assert "Original data" in labels
     assert any("Shapiro p before" in stat["label"] for stat in data["stats"])
     assert any("Shapiro p after" in stat["label"] for stat in data["stats"])
+
+
+def test_one_way_anova_returns_results(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "one-way-anova",
+            "csv_data": SAMPLE_CSV,
+            "options": {
+                "value_columns": ["Score"],
+                "group_column": "Group",
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "one-way-anova"
+    for stat in data["stats"]:
+        assert "nan" not in stat["value"].lower()
+
+
+def test_one_way_anova_rejects_single_observation_groups(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "one-way-anova",
+            "csv_data": "Score,Group\n78,A\n85,B\n90,C",
+            "options": {
+                "value_columns": ["Score"],
+                "group_column": "Group",
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert "group sizes" in response.json()["detail"].lower()
+
+
+def test_one_way_anova_wide_format(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "one-way-anova",
+            "csv_data": "Control,DrugA,DrugB\n78,85,90\n82,88,76\n58,64,70",
+            "options": {
+                "value_columns": ["Control", "DrugA", "DrugB"],
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "one-way-anova"
+    assert any(stat["label"] == "Group labels" for stat in data["stats"])
+    for stat in data["stats"]:
+        assert "nan" not in stat["value"].lower()
+
+
+TWO_WAY_CSV = """Score,Group,Method
+78,A,Online
+85,A,InPerson
+90,B,Online
+76,B,InPerson
+82,A,Online
+58,B,InPerson
+64,B,Online
+70,A,InPerson"""
+
+
+def test_two_way_anova_returns_results(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "two-way-anova",
+            "csv_data": TWO_WAY_CSV,
+            "options": {
+                "y_column": "Score",
+                "factor_a_column": "Group",
+                "factor_b_column": "Method",
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["test_id"] == "two-way-anova"
+    assert len(data["stats"]) == 3
+    for stat in data["stats"]:
+        assert "nan" not in stat["value"].lower()
+
+
+def test_two_way_anova_rejects_saturated_design(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "two-way-anova",
+            "csv_data": (
+                "Score,Group,Method\n"
+                "78,A,Online\n"
+                "85,A,InPerson\n"
+                "90,B,Online\n"
+                "76,B,InPerson"
+            ),
+            "options": {
+                "y_column": "Score",
+                "factor_a_column": "Group",
+                "factor_b_column": "Method",
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert "replicate" in response.json()["detail"].lower()
+
+
+def test_two_way_anova_rejects_missing_cells(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        json={
+            "test_id": "two-way-anova",
+            "csv_data": (
+                "Score,Group,Method\n"
+                "78,A,Online\n"
+                "85,A,InPerson\n"
+                "90,B,Online\n"
+                "82,B,Online"
+            ),
+            "options": {
+                "y_column": "Score",
+                "factor_a_column": "Group",
+                "factor_b_column": "Method",
+            },
+        },
+    )
+    assert response.status_code == 422
+    assert "combination" in response.json()["detail"].lower()

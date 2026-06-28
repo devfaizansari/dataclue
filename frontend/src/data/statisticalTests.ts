@@ -106,13 +106,13 @@ export const testCategories: TestCategory[] = [
         id: "one-way-anova",
         label: "One-Way ANOVA",
         description:
-          "Compare means across three or more independent groups to determine if at least one group mean is significantly different.",
+          "Compare means across three or more independent groups. Each group needs at least 2 observations.",
       },
       {
         id: "two-way-anova",
         label: "Two-Way ANOVA",
         description:
-          "Examine the effect of two categorical independent variables on a continuous dependent variable.",
+          "Examine the effect of two categorical independent variables on a continuous dependent variable. Requires replicate observations in factor combinations.",
       },
       {
         id: "repeated-measures-anova",
@@ -337,6 +337,28 @@ export const sampleCsvData = `Age,Score,Group
 31,68,B`;
 
 export const sampleCsvByTest: Record<string, string> = {
+  "one-way-anova": `Score,Group
+78,A
+85,A
+90,A
+76,A
+82,A
+58,B
+64,B
+70,B
+62,B
+68,B`,
+  "two-way-anova": `Score,Group,Method
+78,A,Online
+85,A,InPerson
+90,B,Online
+76,B,InPerson
+82,A,Online
+58,B,InPerson
+64,B,Online
+70,A,InPerson
+62,B,Online
+68,A,InPerson`,
   "logistic-regression": `Age,Score,Passed
 23,78,1
 25,85,1

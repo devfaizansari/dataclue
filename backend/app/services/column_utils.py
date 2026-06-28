@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from app.core.exceptions import DataValidationError
@@ -218,7 +220,11 @@ def resolve_group_column(
 
 def value_and_group(df: pd.DataFrame, options: dict | None = None) -> tuple[pd.Series, pd.Series]:
     options = _options(options)
-    value_col = resolve_numeric_column(df, options, keys=("value_column", "y_column"))
+    value_col = resolve_value_columns(
+        df,
+        options,
+        keys=("value_columns", "value_column", "y_column"),
+    )[0]
     group_name = resolve_group_column(df, options, value_col=value_col)
     subset = df[[value_col, group_name]].dropna()
     values = pd.to_numeric(subset[value_col], errors="coerce")
@@ -286,12 +292,16 @@ def groups_from_column(values: pd.Series, groups: pd.Series) -> dict[str, list[f
 
 
 def format_p(p_value: float) -> str:
+    if not math.isfinite(p_value):
+        return "N/A"
     if p_value < 0.001:
         return "< .001"
     return f"{p_value:.4f}"
 
 
 def significance_badge(p_value: float, alpha: float = 0.05) -> dict[str, str]:
+    if not math.isfinite(p_value):
+        return {"text": "Unavailable", "variant": "neutral"}
     significant = p_value < alpha
     return {
         "text": "Significant" if significant else "Not significant",

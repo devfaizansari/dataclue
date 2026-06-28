@@ -82,6 +82,7 @@ import {
   type FeatureTransformMethod,
 } from "@/lib/featureTransform";
 import FeatureTransformSelector from "./FeatureTransformSelector";
+import RunAnalysisButton from "./RunAnalysisButton";
 import { parseDownloadDatasets } from "@/lib/exportData";
 
 const csvFormatHints: Record<string, string> = {
@@ -281,7 +282,9 @@ export default function CalculatorWorkspace() {
   }, [activeTestId]);
 
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const runAnalysisAnchorRef = useRef<HTMLDivElement>(null);
   const pendingScrollToResultsRef = useRef(false);
+  const [showStickyRunAnalysis, setShowStickyRunAnalysis] = useState(false);
 
   const scrollToResults = useCallback(() => {
     const prefersReducedMotion =
@@ -303,6 +306,24 @@ export default function CalculatorWorkspace() {
     pendingScrollToResultsRef.current = false;
     scrollToResults();
   }, [results, error, loading, scrollToResults]);
+
+  useEffect(() => {
+    const anchor = runAnalysisAnchorRef.current;
+    if (!anchor) {
+      setShowStickyRunAnalysis(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowStickyRunAnalysis(!entry.isIntersecting);
+      },
+      { threshold: 0, rootMargin: "0px 0px -8px 0px" },
+    );
+
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [activeTestId, csvData, variables.length]);
 
   const handleRunAnalysis = async (data: string) => {
     pendingScrollToResultsRef.current = true;
@@ -504,7 +525,9 @@ export default function CalculatorWorkspace() {
   };
 
   return (
-    <section className="relative bg-surface-muted py-8">
+    <section
+      className={`relative bg-surface-muted py-8 ${showStickyRunAnalysis && csvData.trim() ? "pb-24" : ""}`}
+    >
       <BrandLoadingOverlay show={loading} message="Computing your results" />
       <Container>
         <div className="grid min-w-0 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -527,6 +550,7 @@ export default function CalculatorWorkspace() {
               onRunAnalysis={handleRunAnalysis}
               loading={loading}
               formatHint={csvFormatHints[activeTestId]}
+              runAnalysisAnchorRef={runAnalysisAnchorRef}
               />
             </Reveal>
 
@@ -655,6 +679,35 @@ export default function CalculatorWorkspace() {
           </div>
         </div>
       </Container>
+
+      <AnimatePresence>
+        {showStickyRunAnalysis && csvData.trim() && (
+          <motion.div
+            key="sticky-run-analysis"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 shadow-[0_-8px_30px_-12px_rgba(0,0,0,0.2)] backdrop-blur supports-[backdrop-filter]:bg-surface/85"
+          >
+            <Container className="pointer-events-auto">
+              <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+                <div className="hidden lg:block" aria-hidden />
+                <div className="flex items-center justify-between gap-4 py-3 pr-14 sm:pr-16">
+                  <p className="hidden text-sm text-muted sm:block">
+                    Scroll through options, then run when ready.
+                  </p>
+                  <RunAnalysisButton
+                    loading={loading}
+                    onClick={() => handleRunAnalysis(csvData)}
+                    className="ml-auto shadow-md"
+                  />
+                </div>
+              </div>
+            </Container>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

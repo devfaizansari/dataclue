@@ -13,7 +13,7 @@ from sklearn.metrics import cohen_kappa_score, roc_auc_score, roc_curve
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
-from statsmodels.stats.anova import AnovaRM, anova_lm
+from statsmodels.stats.anova import AnovaRM
 from statsmodels.stats.contingency_tables import mcnemar as mcnemar_test
 from statsmodels.stats.power import TTestIndPower
 
@@ -615,43 +615,307 @@ def paired_ttest(df: pd.DataFrame, options: dict) -> AnalysisResponse:
 
 
 def one_way_anova(df: pd.DataFrame, options: dict) -> AnalysisResponse:
-    values, groups = value_and_group(df, options)
-    grouped = groups_from_column(values, groups)
-    samples = [np.array(v) for v in grouped.values()]
+    samples, group_labels, design_note = _one_way_anova_samples(df, options)
+    _validate_one_way_samples(samples)
+
     result = stats.f_oneway(*samples)
+    f_val = float(result.statistic)
     p = float(result.pvalue)
+    if not np.isfinite(f_val) or not np.isfinite(p):
+        raise DataValidationError(
+            "Cannot compute one-way ANOVA for this data. Add more observations per "
+            "group and ensure the dependent variable varies within groups."
+        )
+
     return _response(
         "one-way-anova",
         "One-Way ANOVA",
         [
-            StatResult(label="F-statistic", value=f"{float(result.statistic):.4f}"),
+            StatResult(label="F-statistic", value=f"{f_val:.4f}"),
             StatResult(label="p-value", value=format_p(p), badge=significance_badge(p)),
             StatResult(label="Groups", value=str(len(samples))),
             StatResult(label="Total N", value=str(sum(len(s) for s in samples))),
+            StatResult(label="Group labels", value=", ".join(group_labels)),
         ],
-        f"One-way ANOVA across {len(samples)} groups, p = {format_p(p)}.",
+        (
+            f"One-way ANOVA across {len(samples)} groups ({design_note}), "
+            f"p = {format_p(p)}."
+        ),
     )
+
+
+def _wide_anova_samples(
+    df: pd.DataFrame, value_cols: list[str]
+) -> tuple[list[np.ndarray], list[str]]:
+    samples: list[np.ndarray] = []
+    labels: list[str] = []
+    for col in value_cols:
+        if col not in df.columns:
+            continue
+        arr = pd.to_numeric(df[col], errors="coerce").dropna().to_numpy(dtype=float)
+        if len(arr) > 0:
+            samples.append(arr)
+            labels.append(str(col))
+    return samples, labels
+
+
+def _one_way_single_observation_error(
+    grouped: dict[str, list[float]], group_col: str
+) -> DataValidationError:
+    counts = {name: len(values) for name, values in grouped.items()}
+    preview = ", ".join(f"{name} (n={size})" for name, size in sorted(counts.items())[:8])
+    if len(counts) > 8:
+        preview += f", ... ({len(counts)} groups total)"
+
+    hint = ""
+    if len(counts) >= 3 and all(size == 1 for size in counts.values()):
+        hint = (
+            f' Column "{group_col}" looks like an ID or unique label (one row per category). '
+            "Choose a group column with repeated values (e.g. Treatment = A, B, C), "
+            "or select 2+ numeric columns in wide format (each column = one group)."
+        )
+
+    return DataValidationError(
+        "One-way ANOVA needs at least 2 observations in one or more groups. "
+        f"Current group sizes: {preview}.{hint}"
+    )
+
+
+def _one_way_anova_samples(
+    df: pd.DataFrame, options: dict
+) -> tuple[list[np.ndarray], list[str], str]:
+    value_cols = resolve_value_columns(
+        df,
+        options,
+        keys=("value_columns", "value_column", "y_column"),
+    )
+    group_col = options.get("group_column")
+
+    if group_col and str(group_col) in df.columns:
+        long_opts = {**options, "value_column": value_cols[0]}
+        values, groups = value_and_group(df, long_opts)
+        grouped = groups_from_column(values, groups)
+        long_samples = [np.array(v) for v in grouped.values()]
+        long_labels = list(grouped.keys())
+
+        if not all(len(sample) < 2 for sample in long_samples):
+            return (
+                long_samples,
+                long_labels,
+                f"long format by {group_col}",
+            )
+
+        if len(value_cols) >= 2:
+            wide_samples, wide_labels = _wide_anova_samples(df, value_cols)
+            if len(wide_samples) >= 2 and not all(len(sample) < 2 for sample in wide_samples):
+                return (
+                    wide_samples,
+                    wide_labels,
+                    "wide format (each selected column is a group)",
+                )
+
+        raise _one_way_single_observation_error(grouped, str(group_col))
+
+    if len(value_cols) >= 2:
+        wide_samples, wide_labels = _wide_anova_samples(df, value_cols)
+        if len(wide_samples) < 2:
+            raise DataValidationError(
+                "Select at least 2 numeric columns for wide-format one-way ANOVA."
+            )
+        return (
+            wide_samples,
+            wide_labels,
+            "wide format (each selected column is a group)",
+        )
+
+    raise DataValidationError(
+        "One-way ANOVA needs either a group column with repeated categories (long format) "
+        "or 2+ numeric columns where each column is a group (wide format)."
+    )
+
+
+def _validate_one_way_samples(samples: list[np.ndarray]) -> None:
+    if all(len(sample) < 2 for sample in samples):
+        sizes = ", ".join(f"group {idx + 1} (n={len(sample)})" for idx, sample in enumerate(samples))
+        raise DataValidationError(
+            "One-way ANOVA needs at least 2 observations in one or more groups. "
+            f"Current group sizes: {sizes}."
+        )
+
+    within_df = sum(len(sample) - 1 for sample in samples)
+    if within_df < 1:
+        raise DataValidationError(
+            "One-way ANOVA cannot estimate within-group variance for this data."
+        )
+
+    within_ss = sum(
+        float(np.var(sample, ddof=1)) * (len(sample) - 1)
+        for sample in samples
+        if len(sample) > 1
+    )
+    if within_ss <= 0:
+        raise DataValidationError(
+            "Cannot compute F-statistic: values are identical within every group."
+        )
+
+
+def _type2_two_way_anova_effects(work: pd.DataFrame) -> list[tuple[str, float, float]]:
+    """Type II two-way ANOVA via nested OLS models. Returns (effect, F, p)."""
+    full_formula = "y ~ C(factor_a) + C(factor_b) + C(factor_a):C(factor_b)"
+    additive_formula = "y ~ C(factor_a) + C(factor_b)"
+
+    model_full = ols(full_formula, data=work).fit()
+    if model_full.df_resid < 1:
+        raise DataValidationError(
+            "Two-way ANOVA needs replicate observations (more rows than factor "
+            "combinations). With only one row per A×B cell, error variance cannot be "
+            "estimated and F/p values are undefined. Add extra measurements in at "
+            "least one combination."
+        )
+
+    ms_error = model_full.ssr / model_full.df_resid
+    if not np.isfinite(ms_error) or ms_error <= 0:
+        raise DataValidationError(
+            "Cannot estimate error variance: the dependent variable does not vary "
+            "within factor groups. Add replicate measurements or check your data."
+        )
+
+    levels_a = int(work["factor_a"].nunique())
+    levels_b = int(work["factor_b"].nunique())
+    df_a = levels_a - 1
+    df_b = levels_b - 1
+    df_ab = df_a * df_b
+    df_error = int(model_full.df_resid)
+
+    sse_additive = float(ols(additive_formula, data=work).fit().ssr)
+    ss_a = float(ols("y ~ C(factor_b)", data=work).fit().ssr) - sse_additive
+    ss_b = float(ols("y ~ C(factor_a)", data=work).fit().ssr) - sse_additive
+    ss_ab = sse_additive - float(model_full.ssr)
+
+    effects: list[tuple[str, float, float]] = []
+    for key, ss, df in [
+        ("C(factor_a)", ss_a, df_a),
+        ("C(factor_b)", ss_b, df_b),
+        ("C(factor_a):C(factor_b)", ss_ab, df_ab),
+    ]:
+        if df <= 0:
+            continue
+        f_stat = (ss / df) / ms_error
+        if not np.isfinite(f_stat):
+            raise DataValidationError(
+                "Cannot compute two-way ANOVA for this design. Ensure the dependent "
+                "variable varies within groups and add replicate observations."
+            )
+        p_value = float(stats.f.sf(f_stat, df, df_error))
+        effects.append((key, float(f_stat), p_value))
+
+    return effects
 
 
 def two_way_anova(df: pd.DataFrame, options: dict) -> AnalysisResponse:
     num_cols = numeric_columns(df)
     cat_cols = categorical_columns(df)
-    if len(num_cols) < 1 or len(cat_cols) < 2:
-        raise DataValidationError("Two-way ANOVA needs one numeric and two categorical columns")
-    work = df[[num_cols[0], cat_cols[0], cat_cols[1]]].dropna().copy()
+
+    y_col = str(
+        options.get("y_column")
+        or options.get("value_column")
+        or (num_cols[0] if num_cols else "")
+    )
+    factor_a_col = str(
+        options.get("factor_a_column")
+        or options.get("row_column")
+        or (cat_cols[0] if len(cat_cols) > 0 else "")
+    )
+    factor_b_col = str(
+        options.get("factor_b_column")
+        or options.get("col_column")
+        or (cat_cols[1] if len(cat_cols) > 1 else "")
+    )
+
+    if not y_col or y_col not in df.columns:
+        raise DataValidationError(
+            "Select a numeric dependent variable for two-way ANOVA."
+        )
+    if not factor_a_col or factor_a_col not in df.columns:
+        raise DataValidationError("Select factor A (categorical column).")
+    if not factor_b_col or factor_b_col not in df.columns:
+        raise DataValidationError("Select factor B (categorical column).")
+    if factor_a_col == factor_b_col:
+        raise DataValidationError("Factor A and factor B must be different columns.")
+    if factor_a_col == y_col or factor_b_col == y_col:
+        raise DataValidationError("Factors must be categorical and different from the dependent variable.")
+
+    work = df[[y_col, factor_a_col, factor_b_col]].dropna().copy()
     work.columns = ["y", "factor_a", "factor_b"]
-    model = ols("y ~ C(factor_a) + C(factor_b)", data=work).fit()
-    table = anova_lm(model, typ=2)
-    stats_list = [
-        StatResult(label=str(idx), value=f"F={row['F']:.4f}, p={format_p(row['PR(>F)'])}")
-        for idx, row in table.iterrows()
-        if idx != "Residual"
-    ]
+    work["factor_a"] = work["factor_a"].astype(str)
+    work["factor_b"] = work["factor_b"].astype(str)
+
+    if len(work) < 4:
+        raise DataValidationError(
+            "Two-way ANOVA needs at least 4 complete rows after removing missing values."
+        )
+
+    levels_a = work["factor_a"].nunique()
+    levels_b = work["factor_b"].nunique()
+    if levels_a < 2:
+        raise DataValidationError(
+            f'Factor A "{factor_a_col}" must have at least 2 different categories.'
+        )
+    if levels_b < 2:
+        raise DataValidationError(
+            f'Factor B "{factor_b_col}" must have at least 2 different categories.'
+        )
+
+    observed_cells = work.groupby(["factor_a", "factor_b"], observed=True).size()
+    expected_cells = levels_a * levels_b
+    if len(observed_cells) < expected_cells:
+        raise DataValidationError(
+            "Two-way ANOVA requires at least one observation in every factor combination. "
+            "Some A × B groups are missing from your data — add rows for the missing "
+            "combinations or choose different factors."
+        )
+    if len(work) <= expected_cells:
+        raise DataValidationError(
+            "Two-way ANOVA needs replicate observations (more rows than factor "
+            "combinations). With only one row per A×B cell, error variance cannot be "
+            "estimated and F/p values are undefined. Add extra measurements in at "
+            "least one combination."
+        )
+
+    try:
+        effects = _type2_two_way_anova_effects(work)
+    except DataValidationError:
+        raise
+    except Exception as exc:
+        raise DataValidationError(
+            "Cannot compute two-way ANOVA for this design. Ensure both factors have at "
+            "least two levels, every factor combination has data, and the dependent "
+            "variable varies within groups."
+        ) from exc
+
+    label_map = {
+        "C(factor_a)": f"Factor A ({factor_a_col})",
+        "C(factor_b)": f"Factor B ({factor_b_col})",
+        "C(factor_a):C(factor_b)": f"Interaction ({factor_a_col} × {factor_b_col})",
+    }
+    stats_list = []
+    for effect_key, f_stat, p_value in effects:
+        stats_list.append(
+            StatResult(
+                label=label_map.get(effect_key, effect_key),
+                value=f"F={f_stat:.4f}, p={format_p(p_value)}",
+                badge=significance_badge(p_value),
+            )
+        )
+
     return _response(
         "two-way-anova",
         "Two-Way ANOVA",
         stats_list,
-        f"Two-way ANOVA for y by factor_a and factor_b.",
+        (
+            f"Two-way ANOVA for {y_col} by {factor_a_col} and {factor_b_col}, "
+            f"including the interaction effect."
+        ),
     )
 
 
@@ -1409,7 +1673,6 @@ MULTI_VALUE_TESTS = frozenset(
         "anderson-darling",
         "independent-ttest",
         "mann-whitney",
-        "one-way-anova",
         "kruskal-wallis",
         "levene-test",
         "bartlett-test",
